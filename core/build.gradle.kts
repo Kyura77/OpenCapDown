@@ -48,6 +48,6 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.turbine)
     testImplementation(libs.androidx.room.testing)
-    testImplementation(libs.okhttp.mockwebServer)
+    testImplementation(libs.okhttp.mockwebserver)
     testImplementation(project(":core-test-fixtures"))
 }
