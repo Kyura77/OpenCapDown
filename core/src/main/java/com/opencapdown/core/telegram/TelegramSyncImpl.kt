@@ -51,7 +51,7 @@ internal class TelegramSyncImpl(
                     } else {
                         TelegramMediaItem(
                             imageFile = File(path),
-                            caption = page.index + 1
+                            caption = (page.index + 1).toString()
                         )
                     }
                 }
@@ -75,7 +75,7 @@ internal class TelegramSyncImpl(
 
                 if (validItems.isEmpty()) {
                     apiClient.sendMessage(botToken, chatId, captionPrefix, topicId)
-                    continue
+                    return@forEach
                 }
 
                 val messages = apiClient.sendMediaGroup(

@@ -10,6 +10,8 @@ import com.opencapdown.core.downloads.DownloadManager
 import com.opencapdown.core.reader.ReaderEngine
 import com.opencapdown.core.sources.SourceManager
 import com.opencapdown.core.telegram.TelegramSync
+import com.opencapdown.core.telegram.TelegramConfigProvider
+import com.opencapdown.core.database.daos.ChapterDao
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
@@ -20,7 +22,9 @@ internal class OpenCapDownCoreImpl(
     private val telegramSync: TelegramSync,
     private val readerEngine: ReaderEngine,
     private val settingDao: SettingDao,
-    private val libraryMangaDao: LibraryMangaDao
+    private val libraryMangaDao: LibraryMangaDao,
+    private val telegramConfigProvider: TelegramConfigProvider,
+    private val chapterDao: ChapterDao
 ) : OpenCapDownCore {
 
     override suspend fun search(query: String): List<SearchResult> =
@@ -80,14 +84,21 @@ internal class OpenCapDownCoreImpl(
     override suspend fun cancelDownload(jobId: String) =
         downloadManager.cancel(jobId)
 
-    override suspend fun backupChapter(chapterId: String): Result<Unit> =
-        telegramSync.backupChapter(chapterId)
+    override suspend fun backupChapter(chapterId: String): Result<Unit> {
+        val chapter = readerEngine.getChapter(chapterId).chapter
+        val manga = libraryMangaDao.getById(chapter.mangaId)
+        val title = manga?.title ?: "Manga ${chapter.mangaId}"
+        return telegramSync.backupChapter(chapterId, title)
+    }
 
     override suspend fun listTelegramBackups(mangaId: String): List<TelegramBackup> =
         telegramSync.listBackups(mangaId)
 
-    override suspend fun restoreChapter(messageId: Long): Result<Unit> =
-        telegramSync.restoreChapter(messageId)
+    override suspend fun restoreChapter(messageId: Long): Result<Unit> {
+        val chapter = chapterDao.getByTelegramMessageId(messageId)
+            ?: return Result.failure(IllegalArgumentException("Backup not found for message: $messageId"))
+        return telegramSync.restoreChapter(chapter.id, chapter.mangaId)
+    }
 
     override suspend fun getChapter(chapterId: String): ChapterWithPages =
         readerEngine.getChapter(chapterId)
@@ -102,10 +113,17 @@ internal class OpenCapDownCoreImpl(
         readerEngine.updateProgress(mangaId, chapterId, pageIndex)
 
     override suspend fun getSettings(): Map<String, String> {
-        return mapOf("version" to version)
+        val botToken = telegramConfigProvider.getBotToken() ?: ""
+        val chatId = telegramConfigProvider.getChatId()?.toString() ?: ""
+        return mapOf(
+            "version" to version,
+            "botToken" to botToken,
+            "chatId" to chatId
+        )
     }
 
     override suspend fun updateTelegramConfig(botToken: String, chatId: String) {
-        // delegates to TelegramConfigProvider when wired
+        val id = chatId.toLongOrNull() ?: 0L
+        telegramConfigProvider.setConfig(botToken, id)
     }
 }

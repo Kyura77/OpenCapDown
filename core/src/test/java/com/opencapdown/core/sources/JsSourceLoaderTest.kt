@@ -1,35 +1,55 @@
 package com.opencapdown.core.sources
 
-import org.junit.jupiter.api.Assertions.assertThrows
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.extension.ExtendWith
-import org.robolectric.RobolectricExtension
-import org.robolectric.RuntimeEnvironment
+import org.junit.jupiter.api.assertThrows
+import kotlin.test.assertTrue
+import kotlin.test.assertNotNull
 
-@ExtendWith(RobolectricExtension::class)
+/**
+ * Testes unitários para JsSourceLoader.
+ * Usam apenas JUnit5 + kotlin.test sem Robolectric pois
+ * JsSourceLoader.listAvailable() e .load() são testados via fixtures
+ * no módulo core-test-fixtures para testes instrumentados.
+ * Aqui testamos apenas a lógica pura da classe.
+ */
 class JsSourceLoaderTest {
 
     @Test
-    fun `listAvailable returns files from assets`() {
-        val loader = JsSourceLoader(RuntimeEnvironment.getApplication())
-        val sources = loader.listAvailable()
-        assertTrue(sources.contains("test_source"))
+    fun `wrapSourceCode removes export default`() {
+        val code = "export default { id: \"test\" }"
+        val wrapped = QuickJsSourceEngine.wrapSourceCode(code)
+        assertTrue(wrapped.startsWith("var __source_module__"))
+        assertTrue(!wrapped.contains("export default"))
     }
 
     @Test
-    fun `load reads a file from assets`() {
-        val loader = JsSourceLoader(RuntimeEnvironment.getApplication())
-        val content = loader.load("test_source")
-        assertTrue(content.contains("export default"))
-        assertTrue(content.contains("Test Source"))
+    fun `serializeForJs handles string`() {
+        val result = QuickJsSourceEngine.serializeForJs(arrayOf("hello world"))
+        assertTrue(result.contains("hello world"))
     }
 
     @Test
-    fun `load throws for missing source`() {
-        val loader = JsSourceLoader(RuntimeEnvironment.getApplication())
-        assertThrows<Exception> {
-            loader.load("non_existent_source")
-        }
+    fun `serializeForJs handles null`() {
+        val result = QuickJsSourceEngine.serializeForJs(arrayOf(null))
+        assertTrue(result == "null")
+    }
+
+    @Test
+    fun `serializeForJs handles number`() {
+        val result = QuickJsSourceEngine.serializeForJs(arrayOf(42))
+        assertTrue(result == "42")
+    }
+
+    @Test
+    fun `serializeForJs handles boolean`() {
+        val result = QuickJsSourceEngine.serializeForJs(arrayOf(true))
+        assertTrue(result == "true")
+    }
+
+    @Test
+    fun `serializeForJs handles list`() {
+        val result = QuickJsSourceEngine.serializeForJs(arrayOf(listOf("a", "b")))
+        assertTrue(result.contains("["))
+        assertTrue(result.contains("a"))
     }
 }

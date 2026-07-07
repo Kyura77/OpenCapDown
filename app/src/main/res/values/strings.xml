@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OpenCapDown</string>
+    <string name="nav_library">Biblioteca</string>
+    <string name="nav_search">Busca</string>
+    <string name="nav_downloads">Downloads</string>
+    <string name="nav_settings">Ajustes</string>
+
+    <string name="empty_library">Sua biblioteca está vazia. Toque na lupa para adicionar.</string>
+    <string name="empty_search">Nenhum resultado encontrado para sua busca.</string>
+    <string name="empty_downloads_active">Nenhum download em andamento no momento.</string>
+    <string name="empty_downloads_complete">Nenhum capítulo baixado para leitura offline.</string>
+    
+    <string name="error_loading">Ocorreu um erro ao carregar os dados.</string>
+    <string name="action_retry">Tentar novamente</string>
+    <string name="search_hint">Buscar mangás...</string>
+    
+    <string name="action_add_to_library">Adicionar à Biblioteca</string>
+    <string name="action_remove_from_library">Remover da Biblioteca</string>
+    <string name="chapters_header">Capítulos</string>
+    
+    <string name="menu_download">Download</string>
+    <string name="menu_telegram_backup">Backup Telegram</string>
+    <string name="menu_mark_read">Marcar como lido</string>
+    <string name="menu_mark_unread">Marcar como não lido</string>
+    
+    <string name="next_chapter_prompt">Próximo capítulo?</string>
+    <string name="action_next">Sim, ler próximo</string>
+    <string name="action_cancel">Cancelar</string>
+    
+    <string name="reader_vertical">Vertical (Webtoon)</string>
+    <string name="reader_horizontal">Horizontal (Página)</string>
+    <string name="page_number">Pág. %1$d / %2$d</string>
+    
+    <string name="settings_telegram_token">Bot Token (Telegram)</string>
+    <string name="settings_telegram_chat">Chat ID (Telegram)</string>
+    <string name="settings_connection_status">Status de conexão: %1$s</string>
+    <string name="settings_connection_ok">Verificado</string>
+    <string name="settings_connection_missing">Não configurado</string>
+    <string name="settings_connection_error">Erro de Conexão</string>
+    
+    <string name="settings_core_version">Versão do Core: %1$s</string>
+    <string name="settings_cache_size">Tamanho do cache: %1$s</string>
+    <string name="settings_clear_cache">Limpar Cache</string>
+    <string name="settings_save_config">Salvar Configurações</string>
+    <string name="settings_saved_toast">Configurações salvas com sucesso!</string>
+    
+    <string name="tab_active">Ativos</string>
+    <string name="tab_completed">Completos</string>
+    <string name="swipe_to_delete">Arraste para deletar cache</string>
+</resources>

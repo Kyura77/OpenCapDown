@@ -1,11 +1,18 @@
 package com.opencapdown.core.sources
 
-import android.util.Log
 import app.cash.quickjs.QuickJs
-import app.cash.quickjs.QuickJsFunction
 import com.opencapdown.core.common.Logger
 import org.json.JSONObject
+import org.json.JSONArray
 import java.io.Closeable
+
+internal interface HttpBridgeInterface {
+    fun fetch(url: String, headersJson: String?): String
+}
+
+internal interface HtmlBridgeInterface {
+    fun parse(html: String): String
+}
 
 internal class QuickJsSourceEngine(
     private val httpBridge: HttpBridge,
@@ -15,39 +22,38 @@ internal class QuickJsSourceEngine(
     private val runtime = QuickJs.create()
 
     init {
-        runtime.set("__http", createHttpBridgeFunction())
-        runtime.set("__html", createHtmlBridgeFunction())
+        runtime.set("__http", HttpBridgeInterface::class.java, object : HttpBridgeInterface {
+            override fun fetch(url: String, headersJson: String?): String {
+                val headers = if (headersJson != null) {
+                    try {
+                        val obj = JSONObject(headersJson)
+                        obj.keys().asSequence().associateWith { obj.getString(it) }
+                    } catch (_: Exception) { emptyMap() }
+                } else emptyMap()
+                return httpBridge.fetch(url, headers)
+            }
+        })
+
+        runtime.set("__html", HtmlBridgeInterface::class.java, object : HtmlBridgeInterface {
+            override fun parse(html: String): String {
+                return htmlParserBridge.parse(html).html()
+            }
+        })
+
         evaluateInitScript()
-    }
-
-    private fun createHttpBridgeFunction(): QuickJsFunction {
-        return QuickJsFunction { args ->
-            if (args.isEmpty()) return@QuickJsFunction ""
-            val url = args[0]?.toString() ?: return@QuickJsFunction ""
-            val headersJson = args.getOrNull(1)?.toString()
-            val headers = if (headersJson != null) {
-                try {
-                    val obj = JSONObject(headersJson)
-                    obj.keys().asSequence().associateWith { obj.getString(it) }
-                } catch (_: Exception) { emptyMap() }
-            } else emptyMap()
-            httpBridge.fetch(url, headers)
-        }
-    }
-
-    private fun createHtmlBridgeFunction(): QuickJsFunction {
-        return QuickJsFunction { args ->
-            val html = args.getOrNull(0)?.toString() ?: return@QuickJsFunction ""
-            htmlParserBridge.parse(html).html()
-        }
     }
 
     private fun evaluateInitScript() {
         runtime.evaluate("""
             globalThis.SourceEnv = {
                 log: function(level, msg) {},
-                fetch: function(url) { return __http.fetch(url, null); },
-                parseHtml: function(html) { return __html.parse(html); }
+                fetch: function(url, headers) { 
+                    var h = headers ? JSON.stringify(headers) : null;
+                    return __http.fetch(url, h); 
+                },
+                parseHtml: function(html) { 
+                    return __html.parse(html); 
+                }
             };
         """.trimIndent())
     }
@@ -63,13 +69,47 @@ internal class QuickJsSourceEngine(
         runtime.evaluate("""
             var __p = __source_module__["$methodName"]($argStr);
             if (__p && typeof __p.then === 'function') {
-                __p.then(function(v) { globalThis.__r = v; }, function(e) { globalThis.__r = null; });
+                __p.then(function(v) { 
+                    globalThis.__r = (typeof v === 'string') ? v : JSON.stringify(v); 
+                }, function(e) { 
+                    globalThis.__r = null; 
+                });
             } else {
-                globalThis.__r = __p;
+                globalThis.__r = (typeof __p === 'string') ? __p : JSON.stringify(__p);
             }
         """.trimIndent())
         executePendingJobs()
-        return runtime.get("__r") as T
+        val rawResult = runtime.get("__r", String::class.java) ?: return null as T
+
+        if (rawResult.startsWith("[") || rawResult.startsWith("{")) {
+            return try {
+                parseJson(rawResult) as T
+            } catch (_: Exception) {
+                rawResult as T
+            }
+        }
+        return rawResult as T
+    }
+
+    private fun parseJson(jsonStr: String): Any? {
+        if (jsonStr.startsWith("[")) {
+            val arr = JSONArray(jsonStr)
+            val list = mutableListOf<Any?>()
+            for (i in 0 until arr.length()) {
+                val item = arr.get(i)
+                list.add(if (item is JSONObject || item is JSONArray) parseJson(item.toString()) else item)
+            }
+            return list
+        } else if (jsonStr.startsWith("{")) {
+            val obj = JSONObject(jsonStr)
+            val map = mutableMapOf<String, Any?>()
+            obj.keys().forEach { key ->
+                val value = obj.get(key)
+                map[key] = if (value is JSONObject || value is JSONArray) parseJson(value.toString()) else if (value == JSONObject.NULL) null else value
+            }
+            return map
+        }
+        return jsonStr
     }
 
     private fun executePendingJobs() {

@@ -51,4 +51,5 @@ dependencies {
     testImplementation(libs.androidx.room.testing)
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(project(":core-test-fixtures"))
+    testImplementation(kotlin("test"))
 }

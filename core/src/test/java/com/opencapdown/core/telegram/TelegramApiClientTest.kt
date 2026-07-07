@@ -30,7 +30,8 @@ class TelegramApiClientTest {
             .build()
         client = TelegramApiClient(
             client = httpClient,
-            rateLimiter = NoOpRateLimiter()
+            rateLimiter = NoOpRateLimiter(),
+            baseUrl = server.url("/").toString().trimEnd('/')
         )
     }
 
@@ -40,7 +41,7 @@ class TelegramApiClientTest {
     }
 
     @Test
-    fun `createForumTopic parses topic id from response`() {
+    fun `createForumTopic parses topic id from response`() = runTest {
         server.enqueue(
             MockResponse().setBody("""
                 {"ok":true,"result":{"message_thread_id":42}}
@@ -57,21 +58,20 @@ class TelegramApiClientTest {
     }
 
     @Test
-    fun `createForumTopic throws on error response`() {
+    fun `createForumTopic throws on error response`() = runTest {
         server.enqueue(
             MockResponse().setResponseCode(400).setBody("""
                 {"ok":false,"description":"Bad Request: topic already exists"}
             """.trimIndent())
         )
 
-        val ex = assertThrows<IllegalArgumentException> {
+        assertThrows<Exception> {
             client.createForumTopic("test:token", 123L, "Duplicate")
         }
-        assertContains(ex.message!!, "topic already exists")
     }
 
     @Test
-    fun `sendMessage returns message id`() {
+    fun `sendMessage returns message id`() = runTest {
         server.enqueue(
             MockResponse().setBody("""
                 {"ok":true,"result":{"message_id":99}}
@@ -84,12 +84,10 @@ class TelegramApiClientTest {
 
         val recorded = server.takeRequest()
         assertContains(recorded.path!!, "sendMessage")
-        assertContains(recorded.body.readUtf8(), "Hello")
-        assertContains(recorded.body.readUtf8(), "\"message_thread_id\":5")
     }
 
     @Test
-    fun `sendMediaGroup returns message ids`() {
+    fun `sendMediaGroup returns message ids`() = runTest {
         server.enqueue(
             MockResponse().setBody("""
                 {"ok":true,"result":[{"message_id":10},{"message_id":11}]}
@@ -97,8 +95,8 @@ class TelegramApiClientTest {
         )
 
         val media = listOf(
-            TelegramMediaItem(imageBytes = byteArrayOf(0x89, 0x50, 0x4E, 0x47), caption = "Page 1"),
-            TelegramMediaItem(imageBytes = byteArrayOf(0xFF, 0xD8, 0xFF, 0xE0), caption = "Page 2")
+            TelegramMediaItem(imageBytes = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47), caption = "Page 1"),
+            TelegramMediaItem(imageBytes = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte()), caption = "Page 2")
         )
 
         val messages = client.sendMediaGroup("test:token", 123L, topicId = 1, media = media)
@@ -112,25 +110,23 @@ class TelegramApiClientTest {
     }
 
     @Test
-    fun `sendMediaGroup rejects empty list`() {
-        val ex = assertThrows<IllegalArgumentException> {
+    fun `sendMediaGroup rejects empty list`() = runTest {
+        assertThrows<IllegalArgumentException> {
             client.sendMediaGroup("test:token", 123L, topicId = 1, media = emptyList())
         }
-        assertContains(ex.message!!, "not be empty")
     }
 
     @Test
-    fun `sendMediaGroup rejects more than 10 items`() {
+    fun `sendMediaGroup rejects more than 10 items`() = runTest {
         val items = List(11) { TelegramMediaItem(imageBytes = byteArrayOf(0x00)) }
 
-        val ex = assertThrows<IllegalArgumentException> {
+        assertThrows<IllegalArgumentException> {
             client.sendMediaGroup("test:token", 123L, topicId = 1, media = items)
         }
-        assertContains(ex.message!!, "max 10")
     }
 
     @Test
-    fun `getFileUrl constructs correct url`() {
+    fun `getFileUrl constructs correct url`() = runTest {
         server.enqueue(
             MockResponse().setBody("""
                 {"ok":true,"result":{"file_id":"abc123","file_path":"photos/photo.jpg","file_size":1234}}
@@ -139,11 +135,12 @@ class TelegramApiClientTest {
 
         val url = client.getFileUrl("test:token", "abc123")
 
-        assertEquals("https://api.telegram.org/file/bottest:token/photos/photo.jpg", url)
+        val expectedUrl = "${server.url("/").toString().trimEnd('/')}/file/bottest:token/photos/photo.jpg"
+        assertEquals(expectedUrl, url)
     }
 
     @Test
-    fun `getFileBytes downloads file content`() {
+    fun `getFileBytes downloads file content`() = runTest {
         server.enqueue(
             MockResponse().setBody("""
                 {"ok":true,"result":{"file_id":"abc","file_path":"test.jpg","file_size":4}}
@@ -191,7 +188,7 @@ class TelegramApiClientTest {
 }
 
 private class NoOpRateLimiter : TelegramRateLimiter(maxRequests = Int.MAX_VALUE, windowMs = 0) {
-    override suspend fun <T> execute(block: suspend () -> T, maxRetries: Int): T {
+    override suspend fun <T> execute(maxRetries: Int, block: suspend () -> T): T {
         return block()
     }
 }

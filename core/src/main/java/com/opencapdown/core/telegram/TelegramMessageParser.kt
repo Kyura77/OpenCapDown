@@ -1,61 +1,61 @@
 package com.opencapdown.core.telegram
 
-import org.json.JSONObject
-
+/**
+ * Parser JSON minimalista para respostas da API Telegram.
+ * Usa regex em vez de org.json para evitar dependências do Android SDK
+ * em testes de JVM pura (unit tests sem Robolectric).
+ */
 internal object TelegramMessageParser {
 
-    fun parseTopicId(responseJson: String): Int {
-        val json = JSONObject(responseJson)
-        require(json.optBoolean("ok", false)) {
-            "Telegram API error: ${json.optString("description")}"
+    private fun checkOk(json: String) {
+        val ok = Regex(""""ok"\s*:\s*(true|false)""").find(json)?.groupValues?.get(1)
+        if (ok != "true") {
+            val desc = Regex(""""description"\s*:\s*"([^"]*)"?""").find(json)?.groupValues?.get(1)
+                ?: "Unknown error"
+            throw IllegalArgumentException("Telegram API error: $desc")
         }
-        return json.getJSONObject("result").getInt("message_thread_id")
+    }
+
+    private fun extractLong(json: String, key: String): Long? {
+        return Regex(""""$key"\s*:\s*(\d+)""").find(json)?.groupValues?.get(1)?.toLongOrNull()
+    }
+
+    private fun extractString(json: String, key: String): String? {
+        return Regex(""""$key"\s*:\s*"([^"]*)"""").find(json)?.groupValues?.get(1)
+    }
+
+    fun parseTopicId(responseJson: String): Int {
+        checkOk(responseJson)
+        return extractLong(responseJson, "message_thread_id")?.toInt()
+            ?: throw IllegalArgumentException("No message_thread_id in response")
     }
 
     fun parseMessageId(responseJson: String): Long {
-        val json = JSONObject(responseJson)
-        require(json.optBoolean("ok", false)) {
-            "Telegram API error: ${json.optString("description")}"
-        }
-        return json.getJSONObject("result").getLong("message_id")
+        checkOk(responseJson)
+        return extractLong(responseJson, "message_id")
+            ?: throw IllegalArgumentException("No message_id in response")
     }
 
     fun parseFileId(responseJson: String): String {
-        val json = JSONObject(responseJson)
-        require(json.optBoolean("ok", false)) {
-            "Telegram API error: ${json.optString("description")}"
-        }
-        val result = json.getJSONObject("result")
-        val photos = result.optJSONArray("photo")
-        if (photos != null && photos.length() > 0) {
-            val lastPhoto = photos.getJSONObject(photos.length() - 1)
-            return lastPhoto.getString("file_id")
-        }
-        val document = result.optJSONObject("document")
-        if (document != null) {
-            return document.getString("file_id")
-        }
-        throw IllegalArgumentException("No file_id found in response")
+        checkOk(responseJson)
+        // Telegram returns photos sorted smallest→largest; last file_id = largest
+        return Regex(""""file_id"\s*:\s*"([^"]*)"""")
+            .findAll(responseJson)
+            .lastOrNull()?.groupValues?.get(1)
+            ?: throw IllegalArgumentException("No file_id found in response")
     }
 
     fun parseFilePath(responseJson: String): String {
-        val json = JSONObject(responseJson)
-        require(json.optBoolean("ok", false)) {
-            "Telegram API error: ${json.optString("description")}"
-        }
-        return json.getJSONObject("result").getString("file_path")
+        checkOk(responseJson)
+        return extractString(responseJson, "file_path")
+            ?: throw IllegalArgumentException("No file_path in response")
     }
 
     fun parseMessageIdsFromAlbum(responseJson: String): List<Long> {
-        val json = JSONObject(responseJson)
-        require(json.optBoolean("ok", false)) {
-            "Telegram API error: ${json.optString("description")}"
-        }
-        val result = json.getJSONArray("result")
-        val ids = mutableListOf<Long>()
-        for (i in 0 until result.length()) {
-            ids.add(result.getJSONObject(i).getLong("message_id"))
-        }
-        return ids
+        checkOk(responseJson)
+        return Regex(""""message_id"\s*:\s*(\d+)""")
+            .findAll(responseJson)
+            .map { it.groupValues[1].toLong() }
+            .toList()
     }
 }

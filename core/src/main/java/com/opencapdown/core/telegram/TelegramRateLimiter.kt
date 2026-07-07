@@ -4,7 +4,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-internal class TelegramRateLimiter(
+internal open class TelegramRateLimiter(
     private val maxRequests: Int = DEFAULT_MAX_REQUESTS,
     private val windowMs: Long = DEFAULT_WINDOW_MS
 ) {
@@ -12,8 +12,8 @@ internal class TelegramRateLimiter(
     private val timestamps = ArrayDeque<Long>()
 
     open suspend fun <T> execute(
-        block: suspend () -> T,
-        maxRetries: Int = DEFAULT_MAX_RETRIES
+        maxRetries: Int = DEFAULT_MAX_RETRIES,
+        block: suspend () -> T
     ): T {
         var lastError: Exception? = null
 

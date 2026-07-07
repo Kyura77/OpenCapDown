@@ -40,15 +40,18 @@ internal class CoreModule(private val context: Context) {
         val telegramRateLimiter = TelegramRateLimiter()
         val telegramApiClient = TelegramApiClient(client, telegramRateLimiter)
         val telegramConfigProvider = EncryptedTelegramConfigProvider(context)
-        val telegramTopicManager = TelegramTopicManager(telegramApiClient, database.libraryMangaDao())
+        val telegramTopicManager = TelegramTopicManager(
+            mangaDao = database.libraryMangaDao(),
+            apiClient = telegramApiClient,
+            configProvider = telegramConfigProvider
+        )
         val telegramSync = TelegramSyncImpl(
             apiClient = telegramApiClient,
-            configProvider = telegramConfigProvider,
             topicManager = telegramTopicManager,
+            configProvider = telegramConfigProvider,
             chapterDao = database.chapterDao(),
             pageDao = database.pageDao(),
-            libraryMangaDao = database.libraryMangaDao(),
-            sourceManager = sourceManager,
+            mangaDao = database.libraryMangaDao(),
             cacheDir = File(context.cacheDir, "telegram")
         )
 
@@ -68,7 +71,9 @@ internal class CoreModule(private val context: Context) {
             telegramSync = telegramSync,
             readerEngine = readerEngine,
             settingDao = database.settingDao(),
-            libraryMangaDao = database.libraryMangaDao()
+            libraryMangaDao = database.libraryMangaDao(),
+            telegramConfigProvider = telegramConfigProvider,
+            chapterDao = database.chapterDao()
         )
     }
 

@@ -23,15 +23,16 @@ internal data class TelegramMediaItem(
 
 internal class TelegramApiClient(
     private val client: OkHttpClient = DEFAULT_CLIENT,
-    private val rateLimiter: TelegramRateLimiter = TelegramRateLimiter()
+    private val rateLimiter: TelegramRateLimiter = TelegramRateLimiter(),
+    private val baseUrl: String = API_BASE
 ) {
-    fun createForumTopic(botToken: String, chatId: Long, name: String): Int {
+    suspend fun createForumTopic(botToken: String, chatId: Long, name: String): Int {
         val json = """
             {"chat_id":$chatId,"name":"${name.replace("\"", "\\\"")}"}
         """.trimIndent()
         val body = json.toRequestBody(JSON_MEDIA_TYPE)
         val request = Request.Builder()
-            .url("$API_BASE/bot$botToken/createForumTopic")
+            .url("$baseUrl/bot$botToken/createForumTopic")
             .post(body)
             .build()
         val response = rateLimiter.execute {
@@ -41,7 +42,7 @@ internal class TelegramApiClient(
         return TelegramMessageParser.parseTopicId(responseBody)
     }
 
-    fun sendMediaGroup(
+    suspend fun sendMediaGroup(
         botToken: String,
         chatId: Long,
         topicId: Int?,
@@ -92,7 +93,7 @@ internal class TelegramApiClient(
         multipart.addFormDataPart("media", mediaArray)
 
         val request = Request.Builder()
-            .url("$API_BASE/bot$botToken/sendMediaGroup")
+            .url("$baseUrl/bot$botToken/sendMediaGroup")
             .post(multipart.build())
             .build()
 
@@ -107,7 +108,7 @@ internal class TelegramApiClient(
         }
     }
 
-    fun sendMessage(
+    suspend fun sendMessage(
         botToken: String,
         chatId: Long,
         text: String,
@@ -120,7 +121,7 @@ internal class TelegramApiClient(
         }
         val body = json.toRequestBody(JSON_MEDIA_TYPE)
         val request = Request.Builder()
-            .url("$API_BASE/bot$botToken/sendMessage")
+            .url("$baseUrl/bot$botToken/sendMessage")
             .post(body)
             .build()
         val response = rateLimiter.execute {
@@ -130,9 +131,9 @@ internal class TelegramApiClient(
         return TelegramMessageParser.parseMessageId(responseBody)
     }
 
-    fun getFileUrl(botToken: String, fileId: String): String {
+    suspend fun getFileUrl(botToken: String, fileId: String): String {
         val request = Request.Builder()
-            .url("$API_BASE/bot$botToken/getFile?file_id=$fileId")
+            .url("$baseUrl/bot$botToken/getFile?file_id=$fileId")
             .get()
             .build()
         val response = rateLimiter.execute {
@@ -140,10 +141,10 @@ internal class TelegramApiClient(
         }
         val responseBody = response.body?.string() ?: throw TelegramApiException("Empty response body")
         val filePath = TelegramMessageParser.parseFilePath(responseBody)
-        return "$FILE_BASE/bot$botToken/$filePath"
+        return "$baseUrl/file/bot$botToken/$filePath"
     }
 
-    fun getFileBytes(botToken: String, fileId: String): ByteArray {
+    suspend fun getFileBytes(botToken: String, fileId: String): ByteArray {
         val url = getFileUrl(botToken, fileId)
         val request = Request.Builder()
             .url(url)

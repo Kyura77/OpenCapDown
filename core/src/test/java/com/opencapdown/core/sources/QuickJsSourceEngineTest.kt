@@ -156,9 +156,7 @@ class QuickJsSourceEngineTest {
         return try {
             QuickJs.create().close()
             true
-        } catch (_: UnsatisfiedLinkError) {
-            false
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             false
         }
     }

@@ -4,7 +4,7 @@ import com.opencapdown.core.database.entities.PageEntity
 
 @Dao
 internal interface PageDao {
-    @Query("SELECT * FROM pages WHERE chapterId = :chapterId ORDER BY index ASC")
+    @Query("SELECT * FROM pages WHERE chapterId = :chapterId ORDER BY `index` ASC")
     suspend fun getByChapter(chapterId: String): List<PageEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

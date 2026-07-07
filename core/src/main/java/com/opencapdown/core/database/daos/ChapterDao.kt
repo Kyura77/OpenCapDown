@@ -11,6 +11,9 @@ internal interface ChapterDao {
     @Query("SELECT * FROM chapters WHERE id = :id")
     suspend fun getById(id: String): ChapterEntity?
 
+    @Query("SELECT * FROM chapters WHERE telegramAlbumMessageId = :messageId LIMIT 1")
+    suspend fun getByTelegramMessageId(messageId: Long): ChapterEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(chapter: ChapterEntity)
 
