@@ -629,29 +629,37 @@ window.saveUpdateRepo = function() {
   }
 };
 
+function setUpdateStatus(html) {
+  var el = document.getElementById('update-status');
+  if (el) el.innerHTML = html;
+}
+
 async function checkForUpdate() {
-  const status = document.getElementById('update-status');
-  if (!status) return;
-  status.textContent = 'Verificando...';
+  setUpdateStatus('<span style="color:var(--text2)">Verificando...</span>');
   try {
-    const res = JSON.parse(OpenCapDown.checkForUpdate());
-    if (!res.ok) { status.textContent = 'Erro: ' + res.error; return; }
-    const data = res.data;
-    if (data.hasUpdate) {
-      status.innerHTML = '';
-      showUpdateDialog(data);
+    var res = JSON.parse(OpenCapDown.checkForUpdate());
+    if (!res.ok) { setUpdateStatus('<span style="color:#e74c3c">Erro: ' + escapeHtml(res.error) + '</span>'); return; }
+    if (res.data.hasUpdate) {
+      setUpdateStatus('');
+      showUpdateDialog(res.data);
     } else {
-      status.innerHTML = '<span style="color:#2ecc71">' + createSVG('check') + ' A versao ' + escapeHtml(data.currentVersion) + ' esta atualizada.</span>';
+      setUpdateStatus('<span style="color:#2ecc71">' + createSVG('check') + ' Atualizado (v' + escapeHtml(res.data.currentVersion) + ')</span>');
     }
-  } catch (e) { status.textContent = 'Falha ao verificar: ' + e.message; }
+  } catch (e) { setUpdateStatus('<span style="color:#e74c3c">Falha: ' + escapeHtml(e.message) + '</span>'); }
 }
 
 async function checkForUpdateSilent() {
+  setUpdateStatus('<span style="color:var(--text2)">Verificando...</span>');
   try {
-    const res = JSON.parse(OpenCapDown.checkForUpdate());
-    if (!res.ok) return;
-    if (res.data.hasUpdate) showUpdateDialog(res.data);
-  } catch (e) { /* silent */ }
+    var res = JSON.parse(OpenCapDown.checkForUpdate());
+    if (!res.ok) { setUpdateStatus('<span style="color:var(--text2)">Offline</span>'); return; }
+    if (res.data.hasUpdate) {
+      setUpdateStatus('');
+      showUpdateDialog(res.data);
+    } else {
+      setUpdateStatus('<span style="color:#2ecc71">' + createSVG('check') + ' Atualizado (v' + escapeHtml(res.data.currentVersion) + ')</span>');
+    }
+  } catch (e) { setUpdateStatus('<span style="color:var(--text2)">Offline</span>'); }
 }
 
 function showUpdateDialog(data) {
