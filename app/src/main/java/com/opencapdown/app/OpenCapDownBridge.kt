@@ -1,7 +1,12 @@
 package com.opencapdown.app
 
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInstaller
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.util.Base64
 import android.webkit.JavascriptInterface
 import androidx.core.content.FileProvider
@@ -48,8 +53,18 @@ internal class OpenCapDownBridge(
     }
 
     @JavascriptInterface
+    fun getSources(): String = runBlocking(Dispatchers.IO) {
+        wrap { core.getSources() }
+    }
+
+    @JavascriptInterface
     fun search(query: String): String = runBlocking(Dispatchers.IO) {
         wrap { core.search(query) }
+    }
+
+    @JavascriptInterface
+    fun searchSource(sourceId: String, query: String): String = runBlocking(Dispatchers.IO) {
+        wrap { core.search(sourceId, query) }
     }
 
     @JavascriptInterface
@@ -242,15 +257,53 @@ internal class OpenCapDownBridge(
     @JavascriptInterface
     fun installUpdate(downloadUrl: String): String {
         return try {
+            val packageManager = context.packageManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+                val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                return gson.toJson(mapOf("ok" to false, "error" to "Permita instalar apps de fontes desconhecidas para continuar"))
+            }
+
             val apkDir = File(cacheDir, "update").apply { mkdirs() }
             val apkFile = File(apkDir, UPDATE_APK_NAME)
 
             val request = Request.Builder().url(URL(downloadUrl)).build()
             val response = client.newCall(request).execute()
-            val bytes = response.body?.bytes() ?: return gson.toJson(mapOf("ok" to false, "error" to "Download failed"))
-
+            if (!response.isSuccessful) {
+                return gson.toJson(mapOf("ok" to false, "error" to "Download falhou: HTTP ${response.code}"))
+            }
+            val bytes = response.body?.bytes() ?: return gson.toJson(mapOf("ok" to false, "error" to "Download vazio"))
             apkFile.outputStream().use { it.write(bytes) }
 
+            installApk(apkFile)
+            gson.toJson(mapOf("ok" to true))
+        } catch (e: Exception) {
+            gson.toJson(mapOf("ok" to false, "error" to (e.message ?: "Install failed")))
+        }
+    }
+
+    private fun installApk(apkFile: File) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            val packageInstaller = context.packageManager.packageInstaller
+            val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+            val sessionId = packageInstaller.createSession(params)
+            val session = packageInstaller.openSession(sessionId)
+            session.openWrite("package", 0, apkFile.length()).use { output ->
+                apkFile.inputStream().use { input -> input.copyTo(output) }
+                session.fsync(output)
+            }
+            val intent = Intent(context, MainActivity::class.java)
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            val pendingIntent = PendingIntent.getActivity(context, 0, intent, flags)
+            session.commit(pendingIntent.intentSender)
+        } else {
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", apkFile)
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, "application/vnd.android.package-archive")
@@ -258,10 +311,6 @@ internal class OpenCapDownBridge(
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
-
-            gson.toJson(mapOf("ok" to true))
-        } catch (e: Exception) {
-            gson.toJson(mapOf("ok" to false, "error" to (e.message ?: "Install failed")))
         }
     }
 

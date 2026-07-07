@@ -27,12 +27,21 @@ internal class OpenCapDownCoreImpl(
     private val chapterDao: ChapterDao
 ) : OpenCapDownCore {
 
+    override suspend fun getSources(): List<SourceInfo> =
+        sourceManager.listSources().map { SourceInfo(it.id, it.name, it.lang) }
+
     override suspend fun search(query: String): List<SearchResult> =
         sourceManager.listSources().flatMap { source ->
             when (val result = sourceManager.search(source.id, query)) {
                 is OpenCapDownResult.Success -> result.data
                 is OpenCapDownResult.Failure -> emptyList()
             }
+        }
+
+    override suspend fun search(sourceId: String, query: String): List<SearchResult> =
+        when (val result = sourceManager.search(sourceId, query)) {
+            is OpenCapDownResult.Success -> result.data
+            is OpenCapDownResult.Failure -> emptyList()
         }
 
     override suspend fun getMangaDetail(sourceId: String, mangaUrl: String): MangaDetail =

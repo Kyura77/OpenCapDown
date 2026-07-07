@@ -28,6 +28,8 @@ api.updateTelegramConfig = (t, c) => JSON.parse(OpenCapDown.updateTelegramConfig
 /* ===== STATE ===== */
 let state = {
   library: [],
+  sources: [],
+  selectedSource: '',
   searchResults: [],
   currentManga: null,
   queue: [],
@@ -174,20 +176,46 @@ async function renderLibrary(container) {
 /* ===== SCREEN: SEARCH ===== */
 let searchTimer;
 function renderSearch(container) {
+  const sourceOptions = state.sources.map(s => `<option value="${escapeHtml(s.id)}" ${state.selectedSource === s.id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('');
   container.innerHTML = `
     <div class="search-bar">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M16 16l5 5"/></svg>
       <input type="text" id="search-input" placeholder="Buscar mangás..." autofocus>
     </div>
+    <div class="source-filter">
+      <select id="source-select">
+        <option value="" ${state.selectedSource === '' ? 'selected' : ''}>Todas as fontes</option>
+        ${sourceOptions}
+      </select>
+    </div>
     <div id="search-results"></div>`;
 
+  loadSourcesIfNeeded();
   const input = document.getElementById('search-input');
+  const select = document.getElementById('source-select');
   input.addEventListener('input', () => {
     clearTimeout(searchTimer);
     const q = input.value.trim();
     if (!q) { document.getElementById('search-results').innerHTML = ''; return; }
     searchTimer = setTimeout(() => doSearch(q), 400);
   });
+  select.addEventListener('change', () => {
+    state.selectedSource = select.value;
+    const q = input.value.trim();
+    if (q) doSearch(q);
+  });
+}
+
+async function loadSourcesIfNeeded() {
+  if (state.sources.length > 0) return;
+  try {
+    state.sources = api.getSources() || [];
+    const select = document.getElementById('source-select');
+    if (select && state.sources.length > 0) {
+      select.innerHTML = '<option value="" selected>Todas as fontes</option>' +
+        state.sources.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
+    }
+  } catch (e) {}
 }
 
 async function doSearch(query) {
@@ -196,7 +224,11 @@ async function doSearch(query) {
     Array(4).fill('<div class="shimmer-card"><div class="shimmer-cover"></div><div class="shimmer-line"></div><div class="shimmer-line"></div></div>').join('') +
     '</div>';
   try {
-    state.searchResults = api.search(query) || [];
+    if (state.selectedSource) {
+      state.searchResults = api.searchSource(state.selectedSource, query) || [];
+    } else {
+      state.searchResults = api.search(query) || [];
+    }
     if (state.searchResults.length === 0) {
       showEmpty(el, 'Nenhum resultado', 'Tente outro termo de busca.');
       return;

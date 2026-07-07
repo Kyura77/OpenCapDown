@@ -21,13 +21,22 @@ internal class SourceManagerImpl(
                 val engine = engineFactory()
                 engine.use {
                     it.loadSource(code)
-                    it.invoke<List<Map<String, String>>>("search", query)
+                    val raw = it.invoke<List<Map<String, Any?>>>("search", query)
+                    raw
+                        .filter { result ->
+                            val title = result["title"] as? String
+                            val url = result["url"] as? String
+                            val hasTitle = title != null && title.isNotBlank()
+                            val hasUrl = url != null && url.isNotBlank()
+                            hasTitle && hasUrl
+                        }
+                        .take(20)
                         .map { result ->
                             SearchResult(
                                 sourceId = sourceId,
-                                title = result["title"]!!,
-                                coverUrl = result["coverUrl"]!!,
-                                url = result["url"]!!
+                                title = ((result["title"] as? String) ?: "").trim(),
+                                coverUrl = (result["coverUrl"] as? String) ?: "",
+                                url = (result["url"] as? String) ?: ""
                             )
                         }
                 }
@@ -45,21 +54,22 @@ internal class SourceManagerImpl(
                 engine.use {
                     it.loadSource(code)
                     val result = it.invoke<Map<String, Any?>>("getMangaDetail", url)
+                    val chapters = (result["chapters"] as? List<Map<String, Any?>>)?.mapNotNull { c ->
+                        val id = c["id"] as? String
+                        val title = c["title"] as? String
+                        val chapterUrl = c["url"] as? String
+                        val number = (c["number"] as? Number)?.toFloat()
+                        if (id.isNullOrBlank() || title.isNullOrBlank() || chapterUrl.isNullOrBlank() || number == null) null
+                        else ChapterInfo(id = id, title = title.trim(), url = chapterUrl, number = number)
+                    } ?: emptyList()
                     MangaDetail(
                         sourceId = sourceId,
                         url = url,
-                        title = result["title"] as String,
-                        coverUrl = result["coverUrl"] as String,
-                        description = result["description"] as? String ?: "",
-                        status = result["status"] as? String ?: "",
-                        chapters = (result["chapters"] as? List<Map<String, Any?>>)?.map { c ->
-                            ChapterInfo(
-                                id = c["id"] as String,
-                                title = c["title"] as String,
-                                url = c["url"] as String,
-                                number = (c["number"] as Number).toFloat()
-                            )
-                        } ?: emptyList()
+                        title = (result["title"] as? String)?.trim() ?: "",
+                        coverUrl = (result["coverUrl"] as? String) ?: "",
+                        description = (result["description"] as? String) ?: "",
+                        status = (result["status"] as? String) ?: "",
+                        chapters = chapters
                     )
                 }
             }.fold(
@@ -75,7 +85,9 @@ internal class SourceManagerImpl(
                 val engine = engineFactory()
                 engine.use {
                     it.loadSource(code)
-                    it.invoke<List<Map<String, Any?>>>("getChapterPages", url)
+                    val raw = it.invoke<List<Map<String, Any?>>>("getChapterPages", url)
+                    raw
+                        .filter { p -> !(p["imageUrl"] as? String).isNullOrBlank() }
                         .mapIndexed { index, p ->
                             PageResult(
                                 index = index,
@@ -91,5 +103,18 @@ internal class SourceManagerImpl(
         }
 
     override fun listSources(): List<JsSourceManifest> =
-        loader.listAvailable().map { JsSourceManifest(it, it, "") }
+        loader.listAvailable().map { id ->
+            val code = loader.load(id)
+            JsSourceManifest(
+                id = id,
+                name = extractStringField(code, "name") ?: id,
+                lang = extractStringField(code, "lang") ?: "",
+                baseUrl = extractStringField(code, "baseUrl") ?: ""
+            )
+        }
+
+    private fun extractStringField(code: String, field: String): String? {
+        val regex = Regex("""$field\s*:\s*["']([^"']+)["']""")
+        return regex.find(code)?.groupValues?.get(1)
+    }
 }

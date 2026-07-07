@@ -6,7 +6,9 @@ import kotlinx.coroutines.flow.Flow
 interface OpenCapDownCore {
     val version: String
 
+    suspend fun getSources(): List<SourceInfo>
     suspend fun search(query: String): List<SearchResult>
+    suspend fun search(sourceId: String, query: String): List<SearchResult>
     suspend fun getMangaDetail(sourceId: String, mangaUrl: String): MangaDetail
     suspend fun getChapterPages(sourceId: String, chapterUrl: String): List<PageResult>
 
