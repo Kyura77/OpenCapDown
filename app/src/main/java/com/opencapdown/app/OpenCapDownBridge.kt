@@ -1,7 +1,10 @@
 package com.opencapdown.app
 
+import android.content.Context
+import android.content.Intent
 import android.util.Base64
 import android.webkit.JavascriptInterface
+import androidx.core.content.FileProvider
 import com.google.gson.Gson
 import com.opencapdown.core.OpenCapDownCore
 import com.opencapdown.core.domain.models.*
@@ -13,12 +16,19 @@ import java.io.FileOutputStream
 import java.net.URL
 
 internal class OpenCapDownBridge(
+    private val context: Context,
     private val core: OpenCapDownCore,
     private val client: OkHttpClient,
     private val cacheDir: File
 ) {
+    companion object {
+        private const val DEFAULT_GH_OWNER = "opencapdown"
+        private const val DEFAULT_GH_REPO = "opencapdown"
+        private const val UPDATE_APK_NAME = "opencapdown-update.apk"
+    }
     private val gson = Gson()
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private val prefs = context.getSharedPreferences("opencapdown_prefs", Context.MODE_PRIVATE)
 
     @Volatile
     private var cachedDownloadQueueJson = "[]"
@@ -159,6 +169,101 @@ internal class OpenCapDownBridge(
         } catch (e: Exception) {
             gson.toJson(mapOf("ok" to false, "error" to (e.message ?: "")))
         }
+    }
+
+    @JavascriptInterface
+    fun getAppVersion(): String = gson.toJson(mapOf("ok" to true, "data" to mapOf(
+        "versionName" to "1.0.0",
+        "versionCode" to 1
+    )))
+
+    @JavascriptInterface
+    fun getUpdateRepo(): String {
+        val owner = prefs.getString("gh_owner", DEFAULT_GH_OWNER) ?: DEFAULT_GH_OWNER
+        val repo = prefs.getString("gh_repo", DEFAULT_GH_REPO) ?: DEFAULT_GH_REPO
+        return gson.toJson(mapOf("ok" to true, "data" to mapOf("owner" to owner, "repo" to repo)))
+    }
+
+    @JavascriptInterface
+    fun setUpdateRepo(owner: String, repo: String): String {
+        prefs.edit().putString("gh_owner", owner).putString("gh_repo", repo).apply()
+        return gson.toJson(mapOf("ok" to true))
+    }
+
+    @JavascriptInterface
+    fun checkForUpdate(): String {
+        return try {
+            val owner = prefs.getString("gh_owner", DEFAULT_GH_OWNER) ?: DEFAULT_GH_OWNER
+            val repo = prefs.getString("gh_repo", DEFAULT_GH_REPO) ?: DEFAULT_GH_REPO
+
+            val request = Request.Builder()
+                .url("https://api.github.com/repos/$owner/$repo/releases/latest")
+                .header("Accept", "application/vnd.github.v3+json")
+                .build()
+
+            val response = client.newCall(request).execute()
+            val body = response.body?.string() ?: return gson.toJson(mapOf("ok" to false, "error" to "Empty response"))
+            val json = gson.fromJson(body, Map::class.java) as Map<String, Any?>
+
+            val tagName = json["tag_name"] as? String ?: return gson.toJson(mapOf("ok" to false, "error" to "No tag_name"))
+            val changelog = json["body"] as? String ?: ""
+            val assets = json["assets"] as? List<Map<String, Any?>> ?: emptyList()
+            val downloadUrl = assets.firstOrNull()?.get("browser_download_url") as? String ?: ""
+            val size = (assets.firstOrNull()?.get("size") as? Number)?.toLong() ?: 0L
+
+            val currentVer = "1.0.0"
+            val latestVer = tagName.removePrefix("v")
+            val hasUpdate = compareVersions(latestVer, currentVer) > 0
+
+            gson.toJson(mapOf("ok" to true, "data" to mapOf(
+                "hasUpdate" to hasUpdate,
+                "currentVersion" to currentVer,
+                "latestVersion" to latestVer,
+                "tagName" to tagName,
+                "downloadUrl" to downloadUrl,
+                "changelog" to changelog,
+                "size" to size
+            )))
+        } catch (e: Exception) {
+            gson.toJson(mapOf("ok" to false, "error" to (e.message ?: "Check failed")))
+        }
+    }
+
+    @JavascriptInterface
+    fun installUpdate(downloadUrl: String): String {
+        return try {
+            val apkDir = File(cacheDir, "update").apply { mkdirs() }
+            val apkFile = File(apkDir, UPDATE_APK_NAME)
+
+            val request = Request.Builder().url(URL(downloadUrl)).build()
+            val response = client.newCall(request).execute()
+            val bytes = response.body?.bytes() ?: return gson.toJson(mapOf("ok" to false, "error" to "Download failed"))
+
+            apkFile.outputStream().use { it.write(bytes) }
+
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", apkFile)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+
+            gson.toJson(mapOf("ok" to true))
+        } catch (e: Exception) {
+            gson.toJson(mapOf("ok" to false, "error" to (e.message ?: "Install failed")))
+        }
+    }
+
+    private fun compareVersions(a: String, b: String): Int {
+        val partsA = a.split(".").map { it.toIntOrNull() ?: 0 }
+        val partsB = b.split(".").map { it.toIntOrNull() ?: 0 }
+        for (i in 0 until maxOf(partsA.size, partsB.size)) {
+            val va = partsA.getOrElse(i) { 0 }
+            val vb = partsB.getOrElse(i) { 0 }
+            if (va != vb) return va - vb
+        }
+        return 0
     }
 
     @JavascriptInterface

@@ -560,6 +560,9 @@ setInterval(() => {
 async function renderSettings(container) {
   try {
     state.settings = api.getSettings() || {};
+    const appVer = JSON.parse(OpenCapDown.getAppVersion()).data;
+    const repoInfo = JSON.parse(OpenCapDown.getUpdateRepo()).data;
+
     const hasToken = state.settings.botToken && state.settings.botToken.length > 0;
     const hasChat = state.settings.chatId && state.settings.chatId.length > 0;
     const configured = hasToken && hasChat;
@@ -581,9 +584,25 @@ async function renderSettings(container) {
         <button class="btn-primary" onclick="saveSettings()">Salvar</button>
       </div>
       <div class="settings-section">
+        <h2>Atualizacao</h2>
+        <div class="settings-field">
+          <label>GitHub Owner</label>
+          <input type="text" id="gh-owner" placeholder="owner" value="${escapeHtml(repoInfo.owner)}">
+        </div>
+        <div class="settings-field">
+          <label>GitHub Repo</label>
+          <input type="text" id="gh-repo" placeholder="repo" value="${escapeHtml(repoInfo.repo)}">
+        </div>
+        <button class="btn-primary" onclick="saveUpdateRepo(); checkForUpdate()">Salvar repo e verificar</button>
+        <div id="update-status" style="margin-top:12px;font-size:13px;color:var(--text2)"></div>
+      </div>
+      <div class="settings-section">
         <h2>Sobre</h2>
-        <p style="font-size:14px;color:var(--text2)">Versao do Core: ${escapeHtml(state.settings.version || '?')}</p>
+        <p style="font-size:14px;color:var(--text2)">Versao: ${escapeHtml(appVer.versionName)} (build ${appVer.versionCode})</p>
+        <p style="font-size:14px;color:var(--text2)">Core: ${escapeHtml(state.settings.version || '?')}</p>
       </div>`;
+
+    checkForUpdateSilent();
   } catch (e) {
     showError(container, e.message);
   }
@@ -600,6 +619,91 @@ window.saveSettings = function() {
       toast('Preencha token e chat ID');
     }
   } catch (e) { toast('Erro: ' + e.message); }
+};
+
+window.saveUpdateRepo = function() {
+  const owner = document.getElementById('gh-owner').value.trim();
+  const repo = document.getElementById('gh-repo').value.trim();
+  if (owner && repo) {
+    JSON.parse(OpenCapDown.setUpdateRepo(owner, repo));
+  }
+};
+
+async function checkForUpdate() {
+  const status = document.getElementById('update-status');
+  if (!status) return;
+  status.textContent = 'Verificando...';
+  try {
+    const res = JSON.parse(OpenCapDown.checkForUpdate());
+    if (!res.ok) { status.textContent = 'Erro: ' + res.error; return; }
+    const data = res.data;
+    if (data.hasUpdate) {
+      status.innerHTML = '';
+      showUpdateDialog(data);
+    } else {
+      status.innerHTML = '<span style="color:#2ecc71">' + createSVG('check') + ' A versao ' + escapeHtml(data.currentVersion) + ' esta atualizada.</span>';
+    }
+  } catch (e) { status.textContent = 'Falha ao verificar: ' + e.message; }
+}
+
+async function checkForUpdateSilent() {
+  try {
+    const res = JSON.parse(OpenCapDown.checkForUpdate());
+    if (!res.ok) return;
+    if (res.data.hasUpdate) showUpdateDialog(res.data);
+  } catch (e) { /* silent */ }
+}
+
+function showUpdateDialog(data) {
+  const existing = document.getElementById('update-dialog');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'update-dialog';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:24px';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+  const dialog = document.createElement('div');
+  dialog.style.cssText = 'background:var(--surface);border-radius:16px;padding:24px;max-width:380px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.3);animation:dialogIn .25s ease';
+
+  const sizeMb = data.size ? (data.size / 1048576).toFixed(1) : '?';
+  dialog.innerHTML = `
+    <h2 style="font-size:20px;font-weight:700;margin-bottom:8px">Atualizacao disponivel</h2>
+    <p style="font-size:14px;color:var(--text2);margin-bottom:16px">
+      ${escapeHtml(data.currentVersion)} &rarr; <strong>${escapeHtml(data.latestVersion)}</strong>
+      ${data.size ? `<br>${sizeMb} MB` : ''}
+    </p>
+    ${data.changelog ? `<div style="font-size:13px;color:var(--text2);background:var(--surface2);padding:12px;border-radius:8px;margin-bottom:16px;max-height:160px;overflow-y:auto;white-space:pre-wrap">${escapeHtml(data.changelog)}</div>` : ''}
+    <div style="display:flex;gap:8px">
+      <button class="btn-primary" style="flex:1" onclick="installUpdate('${escapeHtml(data.downloadUrl)}', this)">Atualizar</button>
+      <button style="flex:1;padding:12px;border-radius:24px;font-size:15px;font-weight:600;background:var(--surface2);color:var(--fg)" onclick="this.closest('#update-dialog').remove()">Agora nao</button>
+    </div>
+    <div id="update-progress" style="margin-top:12px;font-size:13px;color:var(--text2);text-align:center"></div>`;
+
+  overlay.appendChild(dialog);
+  document.body.appendChild(overlay);
+}
+
+window.installUpdate = function(url, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Baixando...';
+  const progress = document.getElementById('update-progress');
+  if (progress) progress.textContent = 'Fazendo download...';
+
+  try {
+    const res = JSON.parse(OpenCapDown.installUpdate(url));
+    if (res.ok) {
+      if (progress) progress.textContent = 'Instalando...';
+    } else {
+      btn.disabled = false;
+      btn.textContent = 'Tentar novamente';
+      if (progress) progress.textContent = 'Erro: ' + res.error;
+    }
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Tentar novamente';
+    if (progress) progress.textContent = 'Erro: ' + e.message;
+  }
 };
 
 /* ===== INIT ===== */

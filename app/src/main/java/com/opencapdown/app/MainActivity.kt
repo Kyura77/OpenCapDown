@@ -51,6 +51,7 @@ class MainActivity : ComponentActivity() {
             webChromeClient = WebChromeClient()
 
             val bridgeImpl = OpenCapDownBridge(
+                context = this@MainActivity,
                 core = core,
                 client = client,
                 cacheDir = File(cacheDir, "webview")
