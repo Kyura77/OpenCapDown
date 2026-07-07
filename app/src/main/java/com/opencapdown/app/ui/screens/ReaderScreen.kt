@@ -86,19 +86,24 @@ fun ReaderScreen(
         try {
             val resolvedPagesList = core.getChapterPages(sourceId, currentChapterUrl)
             pages = resolvedPagesList.sortedBy { it.index }
-            
-            // Garante reset de scroll e pagina para o inicio do novo capitulo
-            try {
-                listState.scrollToItem(0)
-                if (pagerState.pageCount > 0) {
-                    pagerState.scrollToPage(0)
-                }
-            } catch (_: Exception) {}
-            
             isLoading = false
         } catch (e: Exception) {
             Toast.makeText(context, "Erro ao carregar páginas: ${e.message}", Toast.LENGTH_LONG).show()
             isLoading = false
+        }
+    }
+
+    // Garante reset de scroll e pagina para o inicio do novo capitulo de forma segura apos a renderizacao
+    LaunchedEffect(pages) {
+        if (pages != null) {
+            try {
+                listState.scrollToItem(0)
+            } catch (_: Exception) {}
+            try {
+                if (pagerState.pageCount > 0) {
+                    pagerState.scrollToPage(0)
+                }
+            } catch (_: Exception) {}
         }
     }
 
