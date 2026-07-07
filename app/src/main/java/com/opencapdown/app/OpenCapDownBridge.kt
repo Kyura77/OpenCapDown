@@ -173,8 +173,8 @@ internal class OpenCapDownBridge(
 
     @JavascriptInterface
     fun getAppVersion(): String = gson.toJson(mapOf("ok" to true, "data" to mapOf(
-        "versionName" to "1.0.0",
-        "versionCode" to 1
+        "versionName" to BuildConfig.VERSION_NAME,
+        "versionCode" to BuildConfig.VERSION_CODE
     )))
 
     @JavascriptInterface
@@ -211,7 +211,7 @@ internal class OpenCapDownBridge(
             val downloadUrl = assets.firstOrNull()?.get("browser_download_url") as? String ?: ""
             val size = (assets.firstOrNull()?.get("size") as? Number)?.toLong() ?: 0L
 
-            val currentVer = "1.0.0"
+            val currentVer = BuildConfig.VERSION_NAME
             val latestVer = tagName.removePrefix("v")
             val hasUpdate = compareVersions(latestVer, currentVer) > 0
 
