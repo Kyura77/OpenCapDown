@@ -261,7 +261,7 @@ fun ReaderScreen(
                 Card(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 90.dp)
+                        .padding(bottom = 24.dp)
                         .padding(horizontal = 16.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.8f)),
                     shape = RoundedCornerShape(20.dp)
