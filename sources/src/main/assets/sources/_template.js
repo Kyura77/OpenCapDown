@@ -1,30 +1,21 @@
-/**
- * Template para criação de uma nova source.
- *
- * Cada source exporta três funções obrigatórias:
- *   search(query)         → Array<{ id, title, coverUrl }>
- *   getMangaDetail(id)    → { id, title, coverUrl, chapters: Array<{ id, number, title }> }
- *   getChapterPages(id)   → Array<{ url, index }>
- *
- * Regras:
- * - Retornos devem ser serializáveis em JSON.
- * - Evite dependências externas; use apenas fetch() e DOM API.
- */
+export default {
+  id: "template",
+  name: "Template Source",
+  lang: "pt-BR",
+  baseUrl: "https://example.com",
 
-// eslint-disable-next-line no-unused-vars
-function search(query) {
-    // TODO: implementar
+  search: function(query) {
+    SourceEnv.log("info", "search: " + query);
     return [];
-}
+  },
 
-// eslint-disable-next-line no-unused-vars
-function getMangaDetail(id) {
-    // TODO: implementar
-    return null;
-}
+  getMangaDetail: function(url) {
+    SourceEnv.log("info", "detail: " + url);
+    return { title: "", coverUrl: "", description: "", status: "", chapters: [] };
+  },
 
-// eslint-disable-next-line no-unused-vars
-function getChapterPages(id) {
-    // TODO: implementar
+  getChapterPages: function(url) {
+    SourceEnv.log("info", "pages: " + url);
     return [];
+  }
 }
