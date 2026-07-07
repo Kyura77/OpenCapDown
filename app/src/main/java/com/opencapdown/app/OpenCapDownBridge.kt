@@ -99,7 +99,9 @@ internal class OpenCapDownBridge(
     }
 
     @JavascriptInterface
-    fun getDownloadQueue(): String = cachedDownloadQueueJson
+    fun getDownloadQueue(): String {
+        return "{\"ok\":true,\"data\":$cachedDownloadQueueJson}"
+    }
 
     @JavascriptInterface
     fun cancelDownload(jobId: String): String = runBlocking(Dispatchers.IO) {

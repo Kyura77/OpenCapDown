@@ -34,7 +34,7 @@ button { border: none; background: none; cursor: pointer; color: inherit; font: 
 }
 
 /* ===== APP SHELL ===== */
-#app { display: flex; flex-direction: column; height: 100dvh; }
+#app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
 
 #top-bar {
   display: flex; align-items: center; gap: 8px;
@@ -61,8 +61,11 @@ button { border: none; background: none; cursor: pointer; color: inherit; font: 
 
 #bottom-nav {
   display: flex; background: var(--nav-bg); border-top: 1px solid var(--border);
-  padding-bottom: var(--safe-bottom); z-index: 10;
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 0px);
+  z-index: 10;
   transition: transform .25s ease;
+  box-shadow: 0 -1px 0 var(--border);
+  min-height: 56px;
 }
 #bottom-nav.hidden { transform: translateY(100%); }
 .nav-item {
