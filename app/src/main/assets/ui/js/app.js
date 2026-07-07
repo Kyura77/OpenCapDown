@@ -188,7 +188,9 @@ function renderSearch(container) {
 
 async function doSearch(query) {
   const el = document.getElementById('search-results');
-  el.innerHTML = '<div class="shimmer-grid">'.repeat(4).replace(/<div class="shimmer-grid">/g, '<div class="shimmer-card"><div class="shimmer-cover"></div><div class="shimmer-line"></div><div class="shimmer-line"></div></div>').slice(0, -6) + '</div>';
+  el.innerHTML = '<div class="shimmer-grid">' +
+    Array(4).fill('<div class="shimmer-card"><div class="shimmer-cover"></div><div class="shimmer-line"></div><div class="shimmer-line"></div></div>').join('') +
+    '</div>';
   try {
     state.searchResults = api.search(query) || [];
     if (state.searchResults.length === 0) {
@@ -506,7 +508,7 @@ function renderDownloadsList() {
     if (downloadTab === 'active') {
       const active = state.queue.filter(j => j.status === 'QUEUED' || j.status === 'DOWNLOADING');
       if (active.length === 0) {
-        showEmpty(el, 'Nenhum下载 ativo', 'Capítulos baixados aparecerão aqui.');
+        showEmpty(el, 'Nenhum download ativo', 'Capitulos baixados aparecerao aqui.');
         return;
       }
       let html = '';

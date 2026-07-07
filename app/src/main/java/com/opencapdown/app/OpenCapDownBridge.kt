@@ -22,8 +22,8 @@ internal class OpenCapDownBridge(
     private val cacheDir: File
 ) {
     companion object {
-        private const val DEFAULT_GH_OWNER = "opencapdown"
-        private const val DEFAULT_GH_REPO = "opencapdown"
+        private const val DEFAULT_GH_OWNER = "Kyura77"
+        private const val DEFAULT_GH_REPO = "OpenCapDown"
         private const val UPDATE_APK_NAME = "opencapdown-update.apk"
     }
     private val gson = Gson()
@@ -204,14 +204,22 @@ internal class OpenCapDownBridge(
                 .build()
 
             val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: return gson.toJson(mapOf("ok" to false, "error" to "Empty response"))
+            if (!response.isSuccessful) {
+                val msg = when (response.code) {
+                    404 -> "Repo nao encontrado: $owner/$repo"
+                    403 -> "Limite de requisicoes excedido (GitHub)"
+                    else -> "HTTP ${response.code}"
+                }
+                return gson.toJson(mapOf("ok" to false, "error" to msg))
+            }
+            val body = response.body?.string() ?: return gson.toJson(mapOf("ok" to false, "error" to "Resposta vazia"))
             val json = gson.fromJson(body, Map::class.java) as Map<String, Any?>
 
-            val tagName = json["tag_name"] as? String ?: return gson.toJson(mapOf("ok" to false, "error" to "No tag_name"))
+            val tagName = json["tag_name"] as? String ?: return gson.toJson(mapOf("ok" to false, "error" to "Nenhuma release encontrada em $owner/$repo"))
             val changelog = json["body"] as? String ?: ""
             val assets = json["assets"] as? List<Map<String, Any?>> ?: emptyList()
             val downloadUrl = assets.firstOrNull()?.get("browser_download_url") as? String ?: ""
-            val size = (assets.firstOrNull()?.get("size") as? Number)?.toLong() ?: 0L
+            val downloadSize = (assets.firstOrNull()?.get("size") as? Number)?.toLong() ?: 0L
 
             val currentVer = BuildConfig.VERSION_NAME
             val latestVer = tagName.removePrefix("v")
@@ -224,7 +232,7 @@ internal class OpenCapDownBridge(
                 "tagName" to tagName,
                 "downloadUrl" to downloadUrl,
                 "changelog" to changelog,
-                "size" to size
+                "size" to downloadSize
             )))
         } catch (e: Exception) {
             gson.toJson(mapOf("ok" to false, "error" to (e.message ?: "Check failed")))
