@@ -1,0 +1,111 @@
+package com.opencapdown.core
+
+import com.opencapdown.core.common.OpenCapDownResult
+import com.opencapdown.core.database.daos.LibraryMangaDao
+import com.opencapdown.core.database.daos.SettingDao
+import com.opencapdown.core.database.entities.LibraryMangaEntity
+import com.opencapdown.core.database.entities.SettingEntity
+import com.opencapdown.core.domain.models.*
+import com.opencapdown.core.downloads.DownloadManager
+import com.opencapdown.core.reader.ReaderEngine
+import com.opencapdown.core.sources.SourceManager
+import com.opencapdown.core.telegram.TelegramSync
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+
+internal class OpenCapDownCoreImpl(
+    override val version: String,
+    private val sourceManager: SourceManager,
+    private val downloadManager: DownloadManager,
+    private val telegramSync: TelegramSync,
+    private val readerEngine: ReaderEngine,
+    private val settingDao: SettingDao,
+    private val libraryMangaDao: LibraryMangaDao
+) : OpenCapDownCore {
+
+    override suspend fun search(query: String): List<SearchResult> =
+        sourceManager.listSources().flatMap { source ->
+            when (val result = sourceManager.search(source.id, query)) {
+                is OpenCapDownResult.Success -> result.data
+                is OpenCapDownResult.Failure -> emptyList()
+            }
+        }
+
+    override suspend fun getMangaDetail(sourceId: String, mangaUrl: String): MangaDetail =
+        when (val result = sourceManager.getMangaDetail(sourceId, mangaUrl)) {
+            is OpenCapDownResult.Success -> result.data
+            is OpenCapDownResult.Failure -> throw IllegalStateException(result.error.toString())
+        }
+
+    override suspend fun getChapterPages(sourceId: String, chapterUrl: String): List<PageResult> =
+        when (val result = sourceManager.getChapterPages(sourceId, chapterUrl)) {
+            is OpenCapDownResult.Success -> result.data
+            is OpenCapDownResult.Failure -> emptyList()
+        }
+
+    override suspend fun getLibrary(): List<LibraryManga> =
+        libraryMangaDao.observeAll().first().map { entity ->
+            LibraryManga(
+                id = entity.id,
+                sourceId = entity.sourceId,
+                title = entity.title,
+                coverUrl = entity.coverUrl,
+                status = entity.status,
+                telegramTopicId = entity.telegramTopicId
+            )
+        }
+
+    override suspend fun addToLibrary(manga: MangaDetail) {
+        libraryMangaDao.insert(
+            LibraryMangaEntity(
+                id = "${manga.sourceId}-${manga.title.hashCode()}",
+                sourceId = manga.sourceId,
+                title = manga.title,
+                coverUrl = manga.coverUrl,
+                status = manga.status,
+                telegramTopicId = null
+            )
+        )
+    }
+
+    override suspend fun removeFromLibrary(mangaId: String) =
+        libraryMangaDao.delete(mangaId)
+
+    override suspend fun downloadChapter(mangaId: String, chapterId: String) =
+        downloadManager.enqueueChapter(mangaId, chapterId)
+
+    override fun observeDownloadQueue(): Flow<List<DownloadJob>> =
+        downloadManager.observeQueue()
+
+    override suspend fun cancelDownload(jobId: String) =
+        downloadManager.cancel(jobId)
+
+    override suspend fun backupChapter(chapterId: String): Result<Unit> =
+        telegramSync.backupChapter(chapterId)
+
+    override suspend fun listTelegramBackups(mangaId: String): List<TelegramBackup> =
+        telegramSync.listBackups(mangaId)
+
+    override suspend fun restoreChapter(messageId: Long): Result<Unit> =
+        telegramSync.restoreChapter(messageId)
+
+    override suspend fun getChapter(chapterId: String): ChapterWithPages =
+        readerEngine.getChapter(chapterId)
+
+    override suspend fun markAsRead(chapterId: String) =
+        readerEngine.markAsRead(chapterId)
+
+    override suspend fun getReadingProgress(mangaId: String): ReadingProgress? =
+        readerEngine.getReadingProgress(mangaId)
+
+    override suspend fun updateReadingProgress(mangaId: String, chapterId: String, pageIndex: Int) =
+        readerEngine.updateProgress(mangaId, chapterId, pageIndex)
+
+    override suspend fun getSettings(): Map<String, String> {
+        return mapOf("version" to version)
+    }
+
+    override suspend fun updateTelegramConfig(botToken: String, chatId: String) {
+        // delegates to TelegramConfigProvider when wired
+    }
+}
