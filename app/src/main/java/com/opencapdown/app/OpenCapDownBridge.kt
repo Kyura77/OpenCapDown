@@ -301,7 +301,7 @@ internal class OpenCapDownBridge(
         }
     }
 
-    private fun <T> wrap(block: suspend () -> T): String {
+    private suspend fun <T> wrap(block: suspend () -> T): String {
         return try {
             val data = block()
             gson.toJson(mapOf("ok" to true, "data" to data))
@@ -310,7 +310,7 @@ internal class OpenCapDownBridge(
         }
     }
 
-    private fun <T> wrapNullable(block: suspend () -> T?): String {
+    private suspend fun <T> wrapNullable(block: suspend () -> T?): String {
         return try {
             val data = block()
             if (data != null) {
@@ -323,7 +323,7 @@ internal class OpenCapDownBridge(
         }
     }
 
-    private fun wrapResult(block: suspend () -> Result<Unit>): String {
+    private suspend fun wrapResult(block: suspend () -> Result<Unit>): String {
         return try {
             val result = block()
             if (result.isSuccess) {
