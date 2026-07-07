@@ -9,5 +9,6 @@ internal data class LibraryMangaEntity(
     val title: String,
     val coverUrl: String,
     val status: String,
-    val telegramTopicId: Int?
+    val telegramTopicId: Int?,
+    val mangaUrl: String = ""
 )

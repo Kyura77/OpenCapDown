@@ -5,5 +5,6 @@ data class LibraryManga(
     val title: String,
     val coverUrl: String,
     val status: String,
-    val telegramTopicId: Int? = null
+    val telegramTopicId: Int? = null,
+    val mangaUrl: String = ""
 )

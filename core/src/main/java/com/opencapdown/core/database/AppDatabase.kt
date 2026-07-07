@@ -12,8 +12,8 @@ import com.opencapdown.core.database.entities.*
         DownloadJobEntity::class,
         SettingEntity::class
     ],
-    version = 1,
-    exportSchema = true
+    version = 2,
+    exportSchema = false
 )
 internal abstract class AppDatabase : RoomDatabase() {
     abstract fun libraryMangaDao(): LibraryMangaDao

@@ -47,6 +47,7 @@ internal class SourceManagerImpl(
                     val result = it.invoke<Map<String, Any?>>("getMangaDetail", url)
                     MangaDetail(
                         sourceId = sourceId,
+                        url = url,
                         title = result["title"] as String,
                         coverUrl = result["coverUrl"] as String,
                         description = result["description"] as? String ?: "",

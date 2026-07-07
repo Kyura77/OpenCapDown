@@ -55,7 +55,8 @@ internal class OpenCapDownCoreImpl(
                 title = entity.title,
                 coverUrl = entity.coverUrl,
                 status = entity.status,
-                telegramTopicId = entity.telegramTopicId
+                telegramTopicId = entity.telegramTopicId,
+                mangaUrl = entity.mangaUrl
             )
         }
 
@@ -67,7 +68,8 @@ internal class OpenCapDownCoreImpl(
                 title = manga.title,
                 coverUrl = manga.coverUrl,
                 status = manga.status,
-                telegramTopicId = null
+                telegramTopicId = null,
+                mangaUrl = manga.url
             )
         )
     }

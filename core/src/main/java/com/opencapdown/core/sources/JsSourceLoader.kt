@@ -9,7 +9,7 @@ internal class JsSourceLoader(private val context: Context) {
 
     fun listAvailable(): List<String> {
         return context.assets.list("sources")
-            ?.filter { it.endsWith(".js") }
+            ?.filter { it.endsWith(".js") && !it.startsWith("_") }
             ?.map { it.removeSuffix(".js") }
             ?: emptyList()
     }

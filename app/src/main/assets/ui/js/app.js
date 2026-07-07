@@ -34,23 +34,26 @@ let state = {
   settings: {},
   progress: null
 };
-let currentRoute = 'library';
 let readerState = null;
 
 /* ===== ROUTER ===== */
+let currentScreen = 'library';
+let currentRoute = 'library';
+
 function navigate(route) {
   const clean = route.replace(/^#/, '');
   const parts = clean.split('/');
-  currentRoute = parts[0];
+  currentScreen = parts[0];
+  currentRoute = clean;
   document.querySelectorAll('.nav-item').forEach(el => {
-    el.classList.toggle('active', el.dataset.route === currentRoute);
+    el.classList.toggle('active', el.dataset.route === currentScreen);
   });
   render();
 }
 
 function navigateBack() {
   if (readerState) return closeReader();
-  if (currentRoute === 'detail' || currentRoute === 'search') {
+  if (currentScreen === 'detail' || currentScreen === 'search') {
     navigate('library');
   }
 }
@@ -65,11 +68,11 @@ function render() {
   content.innerHTML = '';
   content.scrollTop = 0;
 
-  const isReader = currentRoute === 'reader';
+const isReader = currentScreen === 'reader';
   nav.classList.toggle('hidden', isReader);
-  document.querySelector('#top-bar').classList.toggle('hidden', isReader);
+  document.querySelector('#top-bar')?.classList.toggle('hidden', isReader);
 
-  switch (currentRoute) {
+  switch (currentScreen) {
     case 'library': renderLibrary(content); title.textContent = 'Biblioteca'; backBtn.classList.remove('visible'); searchBtn.style.display = 'flex'; break;
     case 'search': renderSearch(content); title.textContent = 'Buscar'; backBtn.classList.add('visible'); searchBtn.style.display = 'none'; break;
     case 'detail': renderDetail(content); title.textContent = state.currentManga?.title || 'Detalhes'; backBtn.classList.add('visible'); searchBtn.style.display = 'none'; break;
@@ -150,14 +153,15 @@ async function renderLibrary(container) {
   try {
     state.library = api.getLibrary() || [];
     if (state.library.length === 0) {
-      showEmpty(container, 'Sua biblioteca está vazia', 'Toque na lupa para adicionar mangas.', `<button class="btn-primary" onclick="navigate('search')">Buscar mangas</button>`);
+      showEmpty(container, 'Sua biblioteca está vazia', 'Toque na lupa para adicionar mangás.', `<button class="btn-primary" onclick="navigate('search')">Buscar mangás</button>`);
       return;
     }
     let html = '<div class="manga-grid">';
     state.library.forEach(item => {
       html += mangaCard(item, () => {
         state.currentManga = item;
-        navigate(`detail/${item.sourceId}/${encodeURIComponent(item.title)}`);
+        const targetUrl = item.mangaUrl || item.title;
+        navigate(`detail/${item.sourceId}/${encodeURIComponent(targetUrl)}`);
       });
     });
     html += '</div>';
@@ -173,7 +177,7 @@ function renderSearch(container) {
   container.innerHTML = `
     <div class="search-bar">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M16 16l5 5"/></svg>
-      <input type="text" id="search-input" placeholder="Buscar mangas..." autofocus>
+      <input type="text" id="search-input" placeholder="Buscar mangás..." autofocus>
     </div>
     <div id="search-results"></div>`;
 
@@ -200,6 +204,7 @@ async function doSearch(query) {
     let html = '<div class="manga-grid">';
     state.searchResults.forEach(item => {
       html += mangaCard(item, () => {
+        state.currentManga = item;
         navigate(`detail/${item.sourceId}/${encodeURIComponent(item.url)}`);
       });
     });
@@ -223,7 +228,7 @@ async function renderDetail(container) {
     }
 
     const detail = sourceId ? api.getMangaDetail(sourceId, mangaUrl) : null;
-    if (!detail) { showError(container, 'Nao foi possivel carregar os detalhes.'); return; }
+    if (!detail) { showError(container, 'Não foi possível carregar os detalhes.'); return; }
 
     const inLibrary = state.library.some(m => m.sourceId === sourceId && m.title === detail.title);
 
@@ -249,7 +254,7 @@ async function renderDetail(container) {
         <div class="detail-info">
           <h1>${escapeHtml(detail.title)}</h1>
           <div class="status-badge">${escapeHtml(detail.status || 'Desconhecido')}</div>
-          <div class="detail-desc" onclick="this.classList.toggle('expanded')">${escapeHtml(detail.description || 'Sem descricao.')}</div>
+          <div class="detail-desc" onclick="this.classList.toggle('expanded')">${escapeHtml(detail.description || 'Sem descrição.')}</div>
           <div class="detail-actions">
             <button class="btn-primary" onclick="${inLibrary ? `removeLib('${detail.sourceId}')` : `addLib('${escapeHtml(JSON.stringify(detail).replace(/'/g, "\\'"))}')`}">${inLibrary ? 'Remover da Biblioteca' : 'Adicionar a Biblioteca'}</button>
           </div>
@@ -265,7 +270,7 @@ window.addLib = async function(jsonStr) {
   try {
     const detail = JSON.parse(jsonStr);
     api.addToLibrary(detail);
-    toast('Adicionado a biblioteca');
+    toast('Adicionado à biblioteca');
     state.library = api.getLibrary() || [];
     render();
   } catch (e) { toast('Erro: ' + e.message); }
@@ -284,7 +289,8 @@ window.removeLib = async function(sourceId) {
 window.openChapter = async function(chapterId, sourceId, mangaTitle, chapterUrl) {
   const manga = state.library.find(m => m.title === mangaTitle);
   const mangaId = manga ? manga.id : sourceId + '-' + mangaTitle;
-  navigate(`reader/${chapterId}/${sourceId}/${mangaId}/${encodeURIComponent(chapterUrl)}`);
+  const mangaUrl = state.currentManga ? state.currentManga.url : (manga ? manga.mangaUrl : mangaId);
+  navigate(`reader/${chapterId}/${sourceId}/${mangaId}/${encodeURIComponent(chapterUrl)}/${encodeURIComponent(mangaUrl)}`);
 };
 
 /* ===== SCREEN: READER ===== */
@@ -295,7 +301,8 @@ function renderReader(container) {
   const chapterId = decodeURIComponent(parts[1] || '');
   const sourceId = decodeURIComponent(parts[2] || '');
   const mangaId = decodeURIComponent(parts[3] || '');
-  const chapterUrl = decodeURIComponent(parts.slice(4).join('/') || '');
+  const chapterUrl = decodeURIComponent(parts[4] || '');
+  const mangaUrl = decodeURIComponent(parts[5] || mangaId);
   let mode = readerState?.mode || 'vertical';
 
   container.innerHTML = `
@@ -309,7 +316,7 @@ function renderReader(container) {
           <button style="visibility:hidden"> </button>
         </div>
         <div class="reader-bottom-bar">
-          <span id="reader-page-label">Pag. 0 / 0</span>
+          <span id="reader-page-label">Pág. 0 / 0</span>
           <input type="range" class="page-slider" id="page-slider" min="0" max="0" value="0" oninput="readerGoTo(parseInt(this.value))">
           <button class="mode-toggle" onclick="readerToggleMode()">${mode === 'vertical' ? 'Horizontal' : 'Vertical'}</button>
         </div>
@@ -317,7 +324,7 @@ function renderReader(container) {
       <div class="reader-scroll" id="reader-scroll"></div>
     </div>`;
 
-  readerState = { chapterId, sourceId, mangaId, chapterUrl, mode, pages: [], currentPage: 0, overlayTimer: null };
+  readerState = { chapterId, sourceId, mangaId, chapterUrl, mangaUrl, mode, pages: [], currentPage: 0, overlayTimer: null };
 
   document.getElementById('reader-container').addEventListener('click', (e) => {
     if (e.target.closest('.reader-top-bar') || e.target.closest('.reader-bottom-bar') || e.target.closest('.mode-toggle')) return;
@@ -337,19 +344,19 @@ async function loadReaderPages() {
     const dbChapter = api.getChapter(readerState.chapterId);
     if (dbChapter && dbChapter.pages && dbChapter.pages.length > 0) {
       pages = dbChapter.pages;
-      document.getElementById('reader-title').textContent = dbChapter.chapter.title || 'Capitulo';
+      document.getElementById('reader-title').textContent = dbChapter.chapter.title || 'Capítulo';
     } else {
       const pageResults = api.getChapterPages(readerState.sourceId, readerState.chapterUrl);
       if (pageResults && pageResults.length > 0) {
         pages = pageResults.map((p, i) => ({ index: i, imageUrl: p.imageUrl, headers: p.headers }));
       }
-      const detail = api.getMangaDetail(readerState.sourceId, readerState.chapterUrl);
-      const chTitle = detail?.chapters?.find(c => c.url === readerState.chapterUrl)?.title || 'Capitulo';
+      const detail = api.getMangaDetail(readerState.sourceId, readerState.mangaUrl);
+      const chTitle = detail?.chapters?.find(c => c.url === readerState.chapterUrl)?.title || 'Capítulo';
       document.getElementById('reader-title').textContent = chTitle;
     }
 
     if (pages.length === 0) {
-      scroll.innerHTML = '<div style="color:#fff;text-align:center;padding:40px">Nenhuma pagina encontrada.</div>';
+      scroll.innerHTML = '<div style="color:#fff;text-align:center;padding:40px">Nenhuma página encontrada.</div>';
       return;
     }
 
@@ -363,7 +370,7 @@ async function loadReaderPages() {
     const startPage = progress && progress.chapterId === readerState.chapterId ? progress.pageIndex : 0;
     readerGoTo(startPage);
 
-    document.getElementById('reader-page-label').textContent = `Pag. ${startPage + 1} / ${pages.length}`;
+    document.getElementById('reader-page-label').textContent = `Pág. ${startPage + 1} / ${pages.length}`;
   } catch (e) {
     scroll.innerHTML = `<div style="color:#fff;text-align:center;padding:40px">Erro: ${escapeHtml(e.message)}</div>`;
   }
@@ -437,7 +444,7 @@ function updateReaderProgress() {
   const label = document.getElementById('reader-page-label');
   const slider = document.getElementById('page-slider');
   const total = readerState.pages.length;
-  if (label) label.textContent = `Pag. ${readerState.currentPage + 1} / ${total}`;
+  if (label) label.textContent = `Pág. ${readerState.currentPage + 1} / ${total}`;
   if (slider) slider.value = readerState.currentPage;
   api.updateReadingProgress(readerState.mangaId, readerState.chapterId, readerState.currentPage);
 }
@@ -508,7 +515,7 @@ function renderDownloadsList() {
     if (downloadTab === 'active') {
       const active = state.queue.filter(j => j.status === 'QUEUED' || j.status === 'DOWNLOADING');
       if (active.length === 0) {
-        showEmpty(el, 'Nenhum download ativo', 'Capitulos baixados aparecerao aqui.');
+        showEmpty(el, 'Nenhum download ativo', 'Capítulos baixados aparecerão aqui.');
         return;
       }
       let html = '';
@@ -553,7 +560,7 @@ window.cancelDownload = function(jobId) {
 };
 
 setInterval(() => {
-  if (currentRoute === 'downloads' && document.getElementById('downloads-list')) {
+  if (currentScreen === 'downloads' && document.getElementById('downloads-list')) {
     renderDownloadsList();
   }
 }, 2000);
@@ -581,12 +588,12 @@ async function renderSettings(container) {
           <input type="text" id="tg-chat" placeholder="-1001234567890" value="${escapeHtml(state.settings.chatId || '')}">
         </div>
         <div class="settings-status ${configured ? 'ok' : 'na'}">
-          ${configured ? createSVG('check') + ' Conectado' : 'Nao configurado'}
+          ${configured ? createSVG('check') + ' Conectado' : 'Não configurado'}
         </div>
         <button class="btn-primary" onclick="saveSettings()">Salvar</button>
       </div>
       <div class="settings-section">
-        <h2>Atualizacao</h2>
+        <h2>Atualização</h2>
         <div class="settings-field">
           <label>GitHub Owner</label>
           <input type="text" id="gh-owner" placeholder="owner" value="${escapeHtml(repoInfo.owner)}">
@@ -600,7 +607,7 @@ async function renderSettings(container) {
       </div>
       <div class="settings-section">
         <h2>Sobre</h2>
-        <p style="font-size:14px;color:var(--text2)">Versao: ${escapeHtml(appVer.versionName)} (build ${appVer.versionCode})</p>
+        <p style="font-size:14px;color:var(--text2)">Versão: ${escapeHtml(appVer.versionName)} (build ${appVer.versionCode})</p>
         <p style="font-size:14px;color:var(--text2)">Core: ${escapeHtml(state.settings.version || '?')}</p>
       </div>`;
 
@@ -616,7 +623,7 @@ window.saveSettings = function() {
     const chat = document.getElementById('tg-chat').value.trim();
     if (token && chat) {
       api.updateTelegramConfig(token, chat);
-      toast('Configuracoes salvas');
+      toast('Configurações salvas');
     } else {
       toast('Preencha token e chat ID');
     }
@@ -678,7 +685,7 @@ function showUpdateDialog(data) {
 
   const sizeMb = data.size ? (data.size / 1048576).toFixed(1) : '?';
   dialog.innerHTML = `
-    <h2 style="font-size:20px;font-weight:700;margin-bottom:8px">Atualizacao disponivel</h2>
+    <h2 style="font-size:20px;font-weight:700;margin-bottom:8px">Atualização disponível</h2>
     <p style="font-size:14px;color:var(--text2);margin-bottom:16px">
       ${escapeHtml(data.currentVersion)} &rarr; <strong>${escapeHtml(data.latestVersion)}</strong>
       ${data.size ? `<br>${sizeMb} MB` : ''}
@@ -686,7 +693,7 @@ function showUpdateDialog(data) {
     ${data.changelog ? `<div style="font-size:13px;color:var(--text2);background:var(--surface2);padding:12px;border-radius:8px;margin-bottom:16px;max-height:160px;overflow-y:auto;white-space:pre-wrap">${escapeHtml(data.changelog)}</div>` : ''}
     <div style="display:flex;gap:8px">
       <button class="btn-primary" style="flex:1" onclick="installUpdate('${escapeHtml(data.downloadUrl)}', this)">Atualizar</button>
-      <button style="flex:1;padding:12px;border-radius:24px;font-size:15px;font-weight:600;background:var(--surface2);color:var(--fg)" onclick="this.closest('#update-dialog').remove()">Agora nao</button>
+      <button style="flex:1;padding:12px;border-radius:24px;font-size:15px;font-weight:600;background:var(--surface2);color:var(--fg)" onclick="this.closest('#update-dialog').remove()">Agora não</button>
     </div>
     <div id="update-progress" style="margin-top:12px;font-size:13px;color:var(--text2);text-align:center"></div>`;
 

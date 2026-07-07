@@ -8,6 +8,7 @@ internal object DatabaseModule {
             context.applicationContext,
             AppDatabase::class.java,
             "opencapdown.db"
-        ).build()
+        ).fallbackToDestructiveMigration()
+        .build()
     }
 }
