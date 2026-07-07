@@ -14,6 +14,10 @@ internal interface HtmlBridgeInterface {
     fun parse(html: String): String
 }
 
+internal interface QueryBridgeInterface {
+    fun query(html: String, css: String): String
+}
+
 internal class QuickJsSourceEngine(
     private val httpBridge: HttpBridge,
     private val htmlParserBridge: HtmlParserBridge,
@@ -40,6 +44,12 @@ internal class QuickJsSourceEngine(
             }
         })
 
+        runtime.set("__query", QueryBridgeInterface::class.java, object : QueryBridgeInterface {
+            override fun query(html: String, css: String): String {
+                return htmlParserBridge.query(html, css)
+            }
+        })
+
         evaluateInitScript()
     }
 
@@ -53,6 +63,9 @@ internal class QuickJsSourceEngine(
                 },
                 parseHtml: function(html) { 
                     return __html.parse(html); 
+                },
+                queryAll: function(html, css) {
+                    return JSON.parse(__query.query(html, css));
                 }
             };
         """.trimIndent())
