@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContentView(webView)
+        webView.loadUrl("file:///android_asset/ui/index.html")
     }
 
     override fun onDestroy() {
