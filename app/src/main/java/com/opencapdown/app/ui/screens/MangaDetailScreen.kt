@@ -49,22 +49,41 @@ fun MangaDetailScreen(
 
     val mangaId = mangaDetail?.let { "${it.sourceId}-${it.title.hashCode()}" } ?: ""
 
+    var cachedManga by remember { mutableStateOf<LibraryManga?>(null) }
+
     // Atualiza status da biblioteca
     val refreshLibraryStatus = suspend {
         val lib = core.getLibrary()
         library = lib
-        if (mangaDetail != null) {
-            isFavorite = lib.any { it.mangaUrl == mangaUrl || it.id == mangaId }
+        val currentMangaId = mangaDetail?.let { "${it.sourceId}-${it.title.hashCode()}" } ?: mangaId
+        if (currentMangaId.isNotEmpty()) {
+            isFavorite = lib.any { it.mangaUrl == mangaUrl || it.id == currentMangaId }
         }
     }
 
     LaunchedEffect(Unit) {
+        // Carrega cache local instantaneamente se houver
+        try {
+            val lib = core.getLibrary()
+            library = lib
+            val local = lib.firstOrNull { it.mangaUrl == mangaUrl }
+            if (local != null) {
+                cachedManga = local
+                isFavorite = true
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // Busca detalhes e capitulos da rede em segundo plano
         try {
             mangaDetail = core.getMangaDetail(sourceId, mangaUrl)
             refreshLibraryStatus()
         } catch (e: Exception) {
-            Toast.makeText(context, "Erro ao carregar detalhes: ${e.message}", Toast.LENGTH_LONG).show()
-            onBack()
+            if (cachedManga == null) {
+                Toast.makeText(context, "Erro ao carregar detalhes: ${e.message}", Toast.LENGTH_LONG).show()
+                onBack()
+            }
         }
     }
 
@@ -74,7 +93,11 @@ fun MangaDetailScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         val detail = mangaDetail
-        if (detail == null) {
+        val displayTitle = detail?.title ?: cachedManga?.title ?: "Carregando..."
+        val displayCoverUrl = detail?.coverUrl ?: cachedManga?.coverUrl ?: ""
+        val displayStatus = detail?.status ?: cachedManga?.status ?: ""
+
+        if (detail == null && cachedManga == null) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -124,8 +147,8 @@ fun MangaDetailScreen(
                                     .aspectRatio(0.72f)
                             ) {
                                 AsyncImage(
-                                    model = detail.coverUrl,
-                                    contentDescription = detail.title,
+                                    model = displayCoverUrl,
+                                    contentDescription = displayTitle,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize()
                                 )
@@ -137,7 +160,7 @@ fun MangaDetailScreen(
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Text(
-                                    text = detail.title,
+                                    text = displayTitle,
                                     fontSize = 20.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White,
@@ -149,14 +172,16 @@ fun MangaDetailScreen(
                                     fontSize = 12.sp,
                                     color = Color.White.copy(alpha = 0.7f)
                                 )
-                                SuggestionChip(
-                                    onClick = {},
-                                    label = { Text(detail.status, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary) },
-                                    colors = SuggestionChipDefaults.suggestionChipColors(
-                                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                                    ),
-                                    border = null
-                                )
+                                if (displayStatus.isNotEmpty()) {
+                                    SuggestionChip(
+                                        onClick = {},
+                                        label = { Text(displayStatus, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary) },
+                                        colors = SuggestionChipDefaults.suggestionChipColors(
+                                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                        ),
+                                        border = null
+                                    )
+                                }
                             }
                         }
                     }
@@ -177,7 +202,16 @@ fun MangaDetailScreen(
                                         core.removeFromLibrary(mangaId)
                                         Toast.makeText(context, "Removido dos favoritos", Toast.LENGTH_SHORT).show()
                                     } else {
-                                        core.addToLibrary(detail)
+                                        val currentDetail = detail ?: MangaDetail(
+                                            sourceId = sourceId,
+                                            url = mangaUrl,
+                                            title = displayTitle,
+                                            coverUrl = displayCoverUrl,
+                                            description = "",
+                                            status = displayStatus,
+                                            chapters = emptyList()
+                                        )
+                                        core.addToLibrary(currentDetail)
                                         Toast.makeText(context, "Adicionado aos favoritos", Toast.LENGTH_SHORT).show()
                                     }
                                     refreshLibraryStatus()
@@ -200,7 +234,7 @@ fun MangaDetailScreen(
                         }
 
                         // Botão Ler Último Capítulo
-                        if (detail.chapters.isNotEmpty()) {
+                        if (detail != null && detail.chapters.isNotEmpty()) {
                             Button(
                                 onClick = {
                                     val firstCh = detail.chapters.first()
@@ -234,7 +268,7 @@ fun MangaDetailScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = detail.description.ifEmpty { "Sem sinopse disponível." },
+                            text = detail?.description?.ifEmpty { "Sem sinopse disponível." } ?: "Carregando sinopse...",
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                             lineHeight = 19.sp,
@@ -260,7 +294,7 @@ fun MangaDetailScreen(
                             .padding(horizontal = 16.dp, vertical = 12.dp)
                     ) {
                         Text(
-                            text = "Capítulos (${detail.chapters.size})",
+                            text = if (detail != null) "Capítulos (${detail.chapters.size})" else "Capítulos (Carregando...)",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -268,88 +302,101 @@ fun MangaDetailScreen(
                     }
                 }
 
-                // Lista de Capítulos
-                itemsIndexed(detail.chapters) { _, chapter ->
-                    val isBackingUp = isBackingUpMap[chapter.id] == true
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onChapterClick(chapter.url, chapter.title) }
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = chapter.title,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "Nº ${chapter.number}",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                            )
+                // Lista de Capítulos ou Spinner Progressivo
+                if (detail == null) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(32.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(36.dp))
                         }
+                    }
+                } else {
+                    itemsIndexed(detail.chapters) { _, chapter ->
+                        val isBackingUp = isBackingUpMap[chapter.id] == true
 
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onChapterClick(chapter.url, chapter.title) }
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            // Botão Baixar Offline
-                            IconButton(
-                                onClick = {
-                                    scope.launch {
-                                        if (!isFavorite) {
-                                            core.addToLibrary(detail)
-                                            refreshLibraryStatus()
-                                        }
-                                        core.downloadChapter(mangaId, chapter.id)
-                                        Toast.makeText(context, "Download iniciado", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.ArrowDropDown,
-                                    contentDescription = "Baixar",
-                                    tint = MaterialTheme.colorScheme.secondary,
-                                    modifier = Modifier.size(26.dp)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = chapter.title,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Nº ${chapter.number}",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                                 )
                             }
 
-                            // Botão Backup Telegram
-                            if (isBackingUp) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            } else {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Botão Baixar Offline
                                 IconButton(
                                     onClick = {
                                         scope.launch {
-                                            isBackingUpMap[chapter.id] = true
-                                            val result = core.backupChapter(chapter.id)
-                                            isBackingUpMap[chapter.id] = false
-                                            if (result.isSuccess) {
-                                                Toast.makeText(context, "Backup enviado para o Telegram!", Toast.LENGTH_SHORT).show()
-                                            } else {
-                                                Toast.makeText(context, "Falha no backup: ${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                            if (!isFavorite) {
+                                                core.addToLibrary(detail)
+                                                refreshLibraryStatus()
                                             }
+                                            core.downloadChapter(mangaId, chapter.id)
+                                            Toast.makeText(context, "Download iniciado", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.Share,
-                                        contentDescription = "Backup Telegram",
-                                        tint = MaterialTheme.colorScheme.tertiary,
-                                        modifier = Modifier.size(18.dp)
+                                        imageVector = Icons.Default.ArrowDropDown,
+                                        contentDescription = "Baixar",
+                                        tint = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier.size(26.dp)
                                     )
+                                }
+
+                                // Botão Backup Telegram
+                                if (isBackingUp) {
+                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                } else {
+                                    IconButton(
+                                        onClick = {
+                                            scope.launch {
+                                                isBackingUpMap[chapter.id] = true
+                                                val result = core.backupChapter(chapter.id)
+                                                isBackingUpMap[chapter.id] = false
+                                                if (result.isSuccess) {
+                                                    Toast.makeText(context, "Backup enviado para o Telegram!", Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    Toast.makeText(context, "Falha no backup: ${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                                }
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Share,
+                                            contentDescription = "Backup Telegram",
+                                            tint = MaterialTheme.colorScheme.tertiary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
                 }
             }
         }

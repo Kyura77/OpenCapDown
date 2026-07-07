@@ -62,7 +62,7 @@ try {
   
   console.log('\n--- Primeiras 5 paginas da API (VIP) ---');
   paginas.slice(0, 5).forEach((p, i) => {
-    console.log(`[Index ${i}] src: ${p.src || p.imageUrl}`);
+    console.log(`[Index ${i}] object: ${JSON.stringify(p)}`);
   });
 
   console.log('\n--- Ultimas 5 paginas da API (VIP) ---');

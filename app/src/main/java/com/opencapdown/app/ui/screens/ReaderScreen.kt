@@ -75,12 +75,26 @@ fun ReaderScreen(
         }
     }
 
+    val resolvedPages = pages ?: emptyList()
+
+    // Estado do Pager para modo página por página (Infinito Inativo)
+    val pagerState = rememberPagerState(pageCount = { resolvedPages.size })
+
     // Carrega páginas ao mudar de capítulo
     LaunchedEffect(currentChapterUrl) {
         isLoading = true
         try {
-            val resolvedPages = core.getChapterPages(sourceId, currentChapterUrl)
-            pages = resolvedPages.sortedBy { it.index }
+            val resolvedPagesList = core.getChapterPages(sourceId, currentChapterUrl)
+            pages = resolvedPagesList.sortedBy { it.index }
+            
+            // Garante reset de scroll e pagina para o inicio do novo capitulo
+            try {
+                listState.scrollToItem(0)
+                if (pagerState.pageCount > 0) {
+                    pagerState.scrollToPage(0)
+                }
+            } catch (_: Exception) {}
+            
             isLoading = false
         } catch (e: Exception) {
             Toast.makeText(context, "Erro ao carregar páginas: ${e.message}", Toast.LENGTH_LONG).show()
@@ -88,15 +102,11 @@ fun ReaderScreen(
         }
     }
 
-    val resolvedPages = pages ?: emptyList()
-
-    // Estado do Pager para modo página por página (Infinito Inativo)
-    val pagerState = rememberPagerState(pageCount = { resolvedPages.size })
-
-    // Calcula página atual para exibição na barra superior
+    // Calcula página atual para exibição na barra superior usando o estado observável 'pages' diretamente
     val currentPageIndex = remember {
         derivedStateOf {
-            if (resolvedPages.isEmpty()) 0
+            val currentPages = pages ?: emptyList()
+            if (currentPages.isEmpty()) 0
             else if (isInfiniteMode) listState.firstVisibleItemIndex + 1
             else pagerState.currentPage + 1
         }
