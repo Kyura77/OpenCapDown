@@ -35,11 +35,13 @@ export default {
     if (data.obr_imagem) {
       img = this.cdnUrl + "/scans/" + (data.scan_id || 1) + "/obras/" + data.obr_id + "/" + data.obr_imagem;
     }
+    var mangaId = (data.obr_id || url) + "";
     var caps = (data.capitulos || data.chapters || []).map(function(c) {
+      var capNumFormatted = (c.cap_numero || "0").toString().replace(/\.0$/, "");
       return {
         id: c.cap_id + "",
-        title: c.cap_nome || "Cap. " + (c.cap_numero || 0),
-        url: c.cap_id + "",
+        title: c.cap_nome || "Cap. " + capNumFormatted,
+        url: mangaId + "|" + capNumFormatted + "|" + c.cap_id,
         number: parseFloat(c.cap_numero) || 0
       };
     });
@@ -52,9 +54,42 @@ export default {
       chapters: caps
     };
   },
-
+ 
   getChapterPages: function(url) {
-    var chapterId = url;
+    var parts = url.split("|");
+    var chapterId = parts.length >= 3 ? parts[2] : url;
+
+    // Tenta primeiro a chamada de API unica (funciona instantaneamente para a grande maioria)
+    try {
+      var apiPages = this.fallbackApiCall(chapterId);
+      if (apiPages && apiPages.length > 0) {
+        return apiPages;
+      }
+    } catch (e) {
+      // Falhou a API (ex: 403 de VIP ou link quebrado), continua para o loop CDN abaixo
+    }
+
+    var obraId = parts.length >= 1 ? parts[0] : "";
+    var capNum = parts.length >= 2 ? parts[1] : "";
+    var scanId2 = this.scanId;
+
+    var pages = [];
+    for (var i = 1; i <= 120; i++) {
+      var imageUrl = this.cdnUrl + "/scans/1/obras/" + obraId + "/capitulos/" + capNum + "/pagina_" + i + ".jpg";
+      var res = SourceEnv.fetch(imageUrl);
+      var trimmed = res ? res.trim() : "";
+      
+      if (!res || trimmed.indexOf("<!doctype") >= 0 || trimmed.indexOf("<!DOCTYPE") >= 0 || trimmed.indexOf("<html") >= 0 || trimmed.indexOf("statusCode\":404") >= 0 || trimmed.indexOf("404 Not Found") >= 0) {
+        break;
+      }
+      
+      pages.push({ index: i - 1, imageUrl: imageUrl, headers: {} });
+    }
+
+    return pages;
+  },
+
+  fallbackApiCall: function(chapterId) {
     var res = SourceEnv.fetch(this.apiUrl + "/capitulos/" + chapterId);
     var json = JSON.parse(res);
     var paginas = json.cap_paginas || json.pages || [];

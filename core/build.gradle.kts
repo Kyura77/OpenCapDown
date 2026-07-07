@@ -52,4 +52,10 @@ dependencies {
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(project(":core-test-fixtures"))
     testImplementation(kotlin("test"))
+ 
+    // Instrumented Tests
+    androidTestImplementation(libs.kotlinx.coroutines.test)
+    androidTestImplementation("androidx.test:runner:1.5.2")
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("junit:junit:4.13.2")
 }

@@ -42,7 +42,10 @@ internal class SourceManagerImpl(
                 }
             }.fold(
                 onSuccess = { OpenCapDownResult.Success(it) },
-                onFailure = { OpenCapDownResult.Failure(SourceError.Unknown(it)) }
+                onFailure = { 
+                    it.printStackTrace()
+                    OpenCapDownResult.Failure(SourceError.Unknown(it)) 
+                }
             )
         }
 
@@ -74,10 +77,13 @@ internal class SourceManagerImpl(
                 }
             }.fold(
                 onSuccess = { OpenCapDownResult.Success(it) },
-                onFailure = { OpenCapDownResult.Failure(SourceError.Unknown(it)) }
+                onFailure = { 
+                    it.printStackTrace()
+                    OpenCapDownResult.Failure(SourceError.Unknown(it)) 
+                }
             )
         }
-
+ 
     override suspend fun getChapterPages(sourceId: String, url: String): OpenCapDownResult<List<PageResult>> =
         withContext(Dispatchers.Default) {
             runCatching {
@@ -98,7 +104,10 @@ internal class SourceManagerImpl(
                 }
             }.fold(
                 onSuccess = { OpenCapDownResult.Success(it) },
-                onFailure = { OpenCapDownResult.Failure(SourceError.Unknown(it)) }
+                onFailure = { 
+                    it.printStackTrace()
+                    OpenCapDownResult.Failure(SourceError.Unknown(it)) 
+                }
             )
         }
 

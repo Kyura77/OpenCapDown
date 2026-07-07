@@ -31,4 +31,7 @@ interface OpenCapDownCore {
 
     suspend fun getSettings(): Map<String, String>
     suspend fun updateTelegramConfig(botToken: String, chatId: String)
+    suspend fun updateVerdinhaConfig(token: String)
+    suspend fun updateVerdinhaMode(mode: String)
+    suspend fun loginVerdinha(login: String, senha: String): Result<Unit>
 }

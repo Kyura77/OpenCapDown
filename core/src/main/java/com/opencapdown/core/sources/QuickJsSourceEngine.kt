@@ -21,7 +21,9 @@ internal interface QueryBridgeInterface {
 internal class QuickJsSourceEngine(
     private val httpBridge: HttpBridge,
     private val htmlParserBridge: HtmlParserBridge,
-    private val logger: Logger
+    private val logger: Logger,
+    private val verdinhaToken: String? = null,
+    private val verdinhaMode: String = "cdn"
 ) : Closeable {
     private val runtime = QuickJs.create()
 
@@ -50,6 +52,11 @@ internal class QuickJsSourceEngine(
             }
         })
 
+        // Injeta o token VIP da Verdinha como uma variável global no JS
+        runtime.evaluate("globalThis.__verdinhaToken = " + if (verdinhaToken != null) "\"$verdinhaToken\"" else "null")
+        // Injeta o modo de leitura da Verdinha (cdn ou vip)
+        runtime.evaluate("globalThis.__verdinhaMode = \"$verdinhaMode\"")
+
         evaluateInitScript()
     }
 
@@ -58,8 +65,12 @@ internal class QuickJsSourceEngine(
             globalThis.SourceEnv = {
                 log: function(level, msg) {},
                 fetch: function(url, headers) { 
-                    var h = headers ? JSON.stringify(headers) : null;
-                    return __http.fetch(url, h); 
+                    var h = headers || {};
+                    if (url.indexOf("api.verdinha.wtf") >= 0 && globalThis.__verdinhaToken) {
+                        h["Authorization"] = "Bearer " + globalThis.__verdinhaToken;
+                    }
+                    var hStr = JSON.stringify(h);
+                    return __http.fetch(url, hStr); 
                 },
                 parseHtml: function(html) { 
                     return __html.parse(html); 
@@ -92,7 +103,7 @@ internal class QuickJsSourceEngine(
             }
         """.trimIndent())
         executePendingJobs()
-        val rawResult = runtime.get("__r", String::class.java) ?: return null as T
+        val rawResult = runtime.evaluate("globalThis.__r") as? String ?: return null as T
 
         if (rawResult.startsWith("[") || rawResult.startsWith("{")) {
             return try {

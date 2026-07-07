@@ -73,15 +73,27 @@ internal class CoreModule(private val context: Context) {
             settingDao = database.settingDao(),
             libraryMangaDao = database.libraryMangaDao(),
             telegramConfigProvider = telegramConfigProvider,
-            chapterDao = database.chapterDao()
+            chapterDao = database.chapterDao(),
+            client = client
         )
     }
 
     private fun createSourceEngine(): QuickJsSourceEngine {
+        val (token, mode) = kotlinx.coroutines.runBlocking {
+            try {
+                val t = database.settingDao().get("verdinhaToken")
+                val m = database.settingDao().get("verdinhaMode") ?: "cdn"
+                Pair(t, m)
+            } catch (e: Exception) {
+                Pair(null, "cdn")
+            }
+        }
         return QuickJsSourceEngine(
             httpBridge = HttpBridge(client),
             htmlParserBridge = HtmlParserBridge(),
-            logger = logger
+            logger = logger,
+            verdinhaToken = token,
+            verdinhaMode = mode
         )
     }
 }
