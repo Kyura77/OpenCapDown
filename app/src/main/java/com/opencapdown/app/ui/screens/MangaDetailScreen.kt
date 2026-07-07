@@ -28,7 +28,11 @@ import coil3.compose.AsyncImage
 import com.opencapdown.core.OpenCapDownCore
 import com.opencapdown.core.domain.models.MangaDetail
 import com.opencapdown.core.domain.models.LibraryManga
+import com.opencapdown.core.domain.models.ReadingProgress
 import kotlinx.coroutines.launch
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,6 +54,31 @@ fun MangaDetailScreen(
     val mangaId = mangaDetail?.let { "${it.sourceId}-${it.title.hashCode()}" } ?: ""
 
     var cachedManga by remember { mutableStateOf<LibraryManga?>(null) }
+    var readingProgress by remember { mutableStateOf<ReadingProgress?>(null) }
+
+    val effectiveMangaId = mangaDetail?.let { "${it.sourceId}-${it.title.hashCode()}" } ?: cachedManga?.id ?: ""
+
+    // Observa o ciclo de vida para recarregar o progresso sempre que o usuario voltar do leitor
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, effectiveMangaId) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                if (effectiveMangaId.isNotEmpty()) {
+                    scope.launch {
+                        try {
+                            readingProgress = core.getReadingProgress(effectiveMangaId)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     // Atualiza status da biblioteca
     val refreshLibraryStatus = suspend {
@@ -233,19 +262,26 @@ fun MangaDetailScreen(
                             Text(if (isFavorite) "Favoritado" else "Favoritar", fontWeight = FontWeight.Bold)
                         }
 
-                        // Botão Ler Último Capítulo
+                        // Botão Ler / Continuar Capítulo
                         if (detail != null && detail.chapters.isNotEmpty()) {
+                            val progress = readingProgress
+                            val targetChapter = if (progress != null) {
+                                detail.chapters.firstOrNull { it.id == progress.chapterId }
+                            } else null
+
+                            val buttonText = if (targetChapter != null) "Continuar" else "Ler Início"
+                            val chToOpen = targetChapter ?: detail.chapters.last() // last() representa o primeiro capitulo lançado
+
                             Button(
                                 onClick = {
-                                    val firstCh = detail.chapters.first()
-                                    onChapterClick(firstCh.url, firstCh.title)
+                                    onChapterClick(chToOpen.url, chToOpen.title)
                                 },
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Ler Início", fontWeight = FontWeight.Bold)
+                                Text(buttonText, fontWeight = FontWeight.Bold)
                             }
                         }
                     }

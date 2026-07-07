@@ -93,15 +93,30 @@ fun ReaderScreen(
         }
     }
 
-    // Garante reset de scroll e pagina para o inicio do novo capitulo de forma segura apos a renderizacao
+    // Garante reset de scroll e pagina para o inicio ou retoma progresso salvo de forma segura apos a renderizacao
     LaunchedEffect(pages) {
-        if (pages != null) {
+        val currentPages = pages
+        if (currentPages != null) {
+            val parts = currentChapterUrl.split("|")
+            val mangaId = parts.firstOrNull() ?: ""
+            val chId = if (parts.size >= 3) parts[2] else currentChapterUrl
+
+            var targetPage = 0
             try {
-                listState.scrollToItem(0)
+                val progress = core.getReadingProgress(mangaId)
+                if (progress != null && progress.chapterId == chId) {
+                    targetPage = progress.pageIndex
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
+            try {
+                listState.scrollToItem(targetPage)
             } catch (_: Exception) {}
             try {
-                if (pagerState.pageCount > 0) {
-                    pagerState.scrollToPage(0)
+                if (pagerState.pageCount > 0 && targetPage < pagerState.pageCount) {
+                    pagerState.scrollToPage(targetPage)
                 }
             } catch (_: Exception) {}
         }
@@ -114,6 +129,23 @@ fun ReaderScreen(
             if (currentPages.isEmpty()) 0
             else if (isInfiniteMode) listState.firstVisibleItemIndex + 1
             else pagerState.currentPage + 1
+        }
+    }
+
+    // Salva o progresso de leitura conforme o usuario rola/muda de pagina
+    LaunchedEffect(currentPageIndex.value) {
+        val pageIdx = currentPageIndex.value - 1
+        if (pageIdx >= 0 && pages != null) {
+            val parts = currentChapterUrl.split("|")
+            val mangaId = parts.firstOrNull() ?: ""
+            val chId = if (parts.size >= 3) parts[2] else currentChapterUrl
+            if (mangaId.isNotEmpty() && chId.isNotEmpty()) {
+                try {
+                    core.updateReadingProgress(mangaId, chId, pageIdx)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
         }
     }
 
