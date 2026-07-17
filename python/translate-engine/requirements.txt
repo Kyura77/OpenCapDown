@@ -1,0 +1,5 @@
+onnxruntime>=1.22
+opencv-python-headless>=4.10
+pillow>=11.3
+google-genai>=1.0
+tqdm>=4.66

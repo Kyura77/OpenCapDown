@@ -13,11 +13,14 @@ class DownloadManagerTest {
     fun `enqueue creates queued job`() = runTest {
         val repository = mockk<DownloadRepository>(relaxed = true)
         val manager = DownloadManagerImpl(
+            context = mockk(relaxed = true),
+            sourceManager = mockk(relaxed = true),
             imageDownloader = mockk(relaxed = true),
             repository = repository,
             cacheDir = File("/tmp")
         )
         manager.enqueueChapter("m1", "c1")
+
         coVerify { repository.createJob("c1") }
     }
 }

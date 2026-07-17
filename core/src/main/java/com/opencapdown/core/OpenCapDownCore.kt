@@ -19,12 +19,14 @@ interface OpenCapDownCore {
     suspend fun downloadChapter(mangaId: String, chapterId: String)
     fun observeDownloadQueue(): Flow<List<DownloadJob>>
     suspend fun cancelDownload(jobId: String)
+    suspend fun processDownloadQueue()
 
     suspend fun backupChapter(chapterId: String): Result<Unit>
     suspend fun listTelegramBackups(mangaId: String): List<TelegramBackup>
     suspend fun restoreChapter(messageId: Long): Result<Unit>
 
     suspend fun getChapter(chapterId: String): ChapterWithPages
+    suspend fun resolvePage(page: com.opencapdown.core.domain.models.Page, sourceId: String, chapterUrl: String): Any
     suspend fun markAsRead(chapterId: String)
     suspend fun getReadingProgress(mangaId: String): ReadingProgress?
     suspend fun updateReadingProgress(mangaId: String, chapterId: String, pageIndex: Int)
@@ -35,3 +37,4 @@ interface OpenCapDownCore {
     suspend fun updateVerdinhaMode(mode: String)
     suspend fun loginVerdinha(login: String, senha: String): Result<Unit>
 }
+

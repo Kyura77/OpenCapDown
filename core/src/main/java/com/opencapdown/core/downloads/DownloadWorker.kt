@@ -1,15 +1,22 @@
 package com.opencapdown.core.downloads
 
 import android.content.Context
-import androidx.work.Worker
+import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.opencapdown.core.OpenCapDownCoreRegistry
 
-internal class DownloadWorker(
+class DownloadWorker(
     context: Context,
     params: WorkerParameters
-) : Worker(context, params) {
-    override fun doWork(): Result {
-        // WorkManager background execution — to be implemented
-        return Result.success()
+) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        val core = OpenCapDownCoreRegistry.core ?: return Result.retry()
+        return try {
+            core.processDownloadQueue()
+            Result.success()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure()
+        }
     }
 }

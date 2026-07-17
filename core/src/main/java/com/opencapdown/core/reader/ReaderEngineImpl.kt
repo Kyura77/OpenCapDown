@@ -30,6 +30,11 @@ internal class ReaderEngineImpl(
         return ChapterWithPages(chapter, pages)
     }
 
+    override suspend fun resolvePage(page: Page, sourceId: String, chapterUrl: String): Any {
+        return pageResolver.resolve(page, sourceId, chapterUrl)
+    }
+
+
     override suspend fun markAsRead(chapterId: String) {
         chapterDao.updateRead(chapterId, true)
     }

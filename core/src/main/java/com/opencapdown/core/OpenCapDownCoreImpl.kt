@@ -12,6 +12,9 @@ import com.opencapdown.core.sources.SourceManager
 import com.opencapdown.core.telegram.TelegramSync
 import com.opencapdown.core.telegram.TelegramConfigProvider
 import com.opencapdown.core.database.daos.ChapterDao
+import com.opencapdown.core.database.daos.PageDao
+import com.opencapdown.core.database.entities.ChapterEntity
+import com.opencapdown.core.database.entities.PageEntity
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
@@ -32,8 +35,10 @@ internal class OpenCapDownCoreImpl(
     private val libraryMangaDao: LibraryMangaDao,
     private val telegramConfigProvider: TelegramConfigProvider,
     private val chapterDao: ChapterDao,
+    private val pageDao: PageDao,
     private val client: OkHttpClient
 ) : OpenCapDownCore {
+
 
     override suspend fun getSources(): List<SourceInfo> =
         sourceManager.listSources().map { SourceInfo(it.id, it.name, it.lang) }
@@ -115,14 +120,68 @@ internal class OpenCapDownCoreImpl(
     override suspend fun removeFromLibrary(mangaId: String) =
         libraryMangaDao.delete(mangaId)
 
-    override suspend fun downloadChapter(mangaId: String, chapterId: String) =
+    override suspend fun downloadChapter(mangaId: String, chapterId: String) {
+        val chapter = chapterDao.getById(chapterId)
+        if (chapter == null) {
+            val manga = libraryMangaDao.getById(mangaId) ?: throw IllegalArgumentException("Manga not in library: $mangaId")
+            val detail = getMangaDetail(manga.sourceId, manga.mangaUrl)
+            val chInfo = detail.chapters.firstOrNull { it.id == chapterId } ?: throw IllegalArgumentException("Chapter not found in source: $chapterId")
+            
+            chapterDao.insert(
+                ChapterEntity(
+                    id = chapterId,
+                    mangaId = mangaId,
+                    number = chInfo.number,
+                    title = chInfo.title,
+                    pageCount = 0,
+                    integrityStatus = "PENDING",
+                    telegramAlbumMessageId = null,
+                    isRead = false
+                )
+            )
+            
+            val pageResults = getChapterPages(manga.sourceId, chInfo.url)
+            val pageEntities = pageResults.map { p ->
+                PageEntity(
+                    id = "${chapterId}_${p.index}",
+                    chapterId = chapterId,
+                    index = p.index,
+                    localPath = null,
+                    telegramFileId = null,
+                    telegramMessageId = null
+                )
+            }
+            pageDao.insertAll(pageEntities)
+            
+            chapterDao.insert(
+                ChapterEntity(
+                    id = chapterId,
+                    mangaId = mangaId,
+                    number = chInfo.number,
+                    title = chInfo.title,
+                    pageCount = pageEntities.size,
+                    integrityStatus = "PENDING",
+                    telegramAlbumMessageId = null,
+                    isRead = false
+                )
+            )
+        }
         downloadManager.enqueueChapter(mangaId, chapterId)
+    }
+
+    override suspend fun resolvePage(page: Page, sourceId: String, chapterUrl: String): Any =
+        readerEngine.resolvePage(page, sourceId, chapterUrl)
+
+    override suspend fun processDownloadQueue() {
+        (downloadManager as? com.opencapdown.core.downloads.DownloadManagerImpl)?.processQueue()
+    }
 
     override fun observeDownloadQueue(): Flow<List<DownloadJob>> =
         downloadManager.observeQueue()
 
     override suspend fun cancelDownload(jobId: String) =
         downloadManager.cancel(jobId)
+
 
     override suspend fun backupChapter(chapterId: String): Result<Unit> {
         val chapter = readerEngine.getChapter(chapterId).chapter

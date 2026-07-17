@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.opencapdown.core.OpenCapDownCore
 import com.opencapdown.core.domain.models.ChapterInfo
-import com.opencapdown.core.domain.models.PageResult
+import com.opencapdown.core.domain.models.Page
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,7 +53,7 @@ fun ReaderScreen(
     var currentChapterUrl by remember { mutableStateOf(chapterUrl) }
     var currentChapterTitle by remember { mutableStateOf(chapterTitle) }
 
-    var pages by remember { mutableStateOf<List<PageResult>?>(null) }
+    var pages by remember { mutableStateOf<List<Page>?>(null) }
     var chapters by remember { mutableStateOf<List<ChapterInfo>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var showBars by remember { mutableStateOf(true) }
@@ -84,8 +84,10 @@ fun ReaderScreen(
     LaunchedEffect(currentChapterUrl) {
         isLoading = true
         try {
-            val resolvedPagesList = core.getChapterPages(sourceId, currentChapterUrl)
-            pages = resolvedPagesList.sortedBy { it.index }
+            val parts = currentChapterUrl.split("|")
+            val chapterId = if (parts.size >= 3) parts[2] else currentChapterUrl
+            val chapterWithPages = core.getChapter(chapterId)
+            pages = chapterWithPages.pages.sortedBy { it.index }
             isLoading = false
         } catch (e: Exception) {
             Toast.makeText(context, "Erro ao carregar páginas: ${e.message}", Toast.LENGTH_LONG).show()
@@ -207,22 +209,14 @@ fun ReaderScreen(
                         .fillMaxSize()
                         .then(gestureModifier)
                 ) {
-                    itemsIndexed(resolvedPages) { index, page ->
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 360.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            AsyncImage(
-                                model = page.imageUrl,
-                                contentDescription = "Página ${index + 1}",
-                                contentScale = ContentScale.FillWidth,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .wrapContentHeight()
-                            )
-                        }
+                    itemsIndexed(resolvedPages) { _, page ->
+                        ReaderPageItem(
+                            core = core,
+                            page = page,
+                            sourceId = sourceId,
+                            chapterUrl = currentChapterUrl,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             } else {
@@ -234,17 +228,13 @@ fun ReaderScreen(
                         .then(gestureModifier)
                 ) { pageIndex ->
                     val page = resolvedPages[pageIndex]
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        AsyncImage(
-                            model = page.imageUrl,
-                            contentDescription = "Página ${pageIndex + 1}",
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
+                    ReaderPageSingle(
+                        core = core,
+                        page = page,
+                        sourceId = sourceId,
+                        chapterUrl = currentChapterUrl,
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
             }
         }
@@ -430,5 +420,95 @@ fun ReaderScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+fun ReaderPageItem(
+    core: OpenCapDownCore,
+    page: Page,
+    sourceId: String,
+    chapterUrl: String,
+    modifier: Modifier = Modifier
+) {
+    var resolvedModel by remember(page, chapterUrl) { mutableStateOf<Any?>(null) }
+    var isLoading by remember(page, chapterUrl) { mutableStateOf(true) }
+    var hasError by remember(page, chapterUrl) { mutableStateOf(false) }
+
+    LaunchedEffect(page, chapterUrl) {
+        isLoading = true
+        hasError = false
+        try {
+            resolvedModel = core.resolvePage(page, sourceId, chapterUrl)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            hasError = true
+        } finally {
+            isLoading = false
+        }
+    }
+
+    Box(
+        modifier = modifier.heightIn(min = 360.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(modifier = Modifier.size(36.dp))
+        } else if (hasError) {
+            Text("Erro ao carregar página", color = Color.Red, fontSize = 12.sp)
+        } else {
+            AsyncImage(
+                model = resolvedModel,
+                contentDescription = "Página ${page.index + 1}",
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight()
+            )
+        }
+    }
+}
+
+@Composable
+fun ReaderPageSingle(
+    core: OpenCapDownCore,
+    page: Page,
+    sourceId: String,
+    chapterUrl: String,
+    modifier: Modifier = Modifier
+) {
+    var resolvedModel by remember(page, chapterUrl) { mutableStateOf<Any?>(null) }
+    var isLoading by remember(page, chapterUrl) { mutableStateOf(true) }
+    var hasError by remember(page, chapterUrl) { mutableStateOf(false) }
+
+    LaunchedEffect(page, chapterUrl) {
+        isLoading = true
+        hasError = false
+        try {
+            resolvedModel = core.resolvePage(page, sourceId, chapterUrl)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            hasError = true
+        } finally {
+            isLoading = false
+        }
+    }
+
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(modifier = Modifier.size(48.dp))
+        } else if (hasError) {
+            Text("Erro ao carregar página", color = Color.Red, fontSize = 14.sp)
+        } else {
+            AsyncImage(
+                model = resolvedModel,
+                contentDescription = "Página ${page.index + 1}",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
     }
 }

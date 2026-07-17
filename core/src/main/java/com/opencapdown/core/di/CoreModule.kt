@@ -29,13 +29,18 @@ internal class CoreModule(private val context: Context) {
         val downloadRepository = DownloadRepository(
             jobDao = database.downloadJobDao(),
             chapterDao = database.chapterDao(),
-            pageDao = database.pageDao()
+            pageDao = database.pageDao(),
+            mangaDao = database.libraryMangaDao()
         )
+
         val downloadManager = DownloadManagerImpl(
+            context = context,
+            sourceManager = sourceManager,
             imageDownloader = imageDownloader,
             repository = downloadRepository,
             cacheDir = File(context.cacheDir, "downloads")
         )
+
 
         val telegramRateLimiter = TelegramRateLimiter()
         val telegramApiClient = TelegramApiClient(client, telegramRateLimiter)
@@ -56,13 +61,14 @@ internal class CoreModule(private val context: Context) {
         )
 
         val readingProgressTracker = ReadingProgressTracker(database.settingDao())
-        val pageResolver = PageResolver(sourceManager, telegramSync, File(context.cacheDir, "pages"))
+        val pageResolver = PageResolver(sourceManager, telegramSync, database.pageDao(), File(context.cacheDir, "pages"))
         val readerEngine = ReaderEngineImpl(
             chapterDao = database.chapterDao(),
             pageDao = database.pageDao(),
             pageResolver = pageResolver,
             progressTracker = readingProgressTracker
         )
+
 
         return OpenCapDownCoreImpl(
             version = version,
@@ -74,8 +80,10 @@ internal class CoreModule(private val context: Context) {
             libraryMangaDao = database.libraryMangaDao(),
             telegramConfigProvider = telegramConfigProvider,
             chapterDao = database.chapterDao(),
+            pageDao = database.pageDao(),
             client = client
         )
+
     }
 
     private fun createSourceEngine(): QuickJsSourceEngine {

@@ -7,6 +7,9 @@ object OpenCapDownCoreFactory {
 
     fun create(context: Context): OpenCapDownCore {
         val coreModule = com.opencapdown.core.di.CoreModule(context.applicationContext)
-        return coreModule.createCore(VERSION)
+        val core = coreModule.createCore(VERSION)
+        OpenCapDownCoreRegistry.core = core
+        return core
     }
 }
+
