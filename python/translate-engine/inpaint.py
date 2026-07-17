@@ -12,7 +12,19 @@ class Inpainter:
             opts = ort.SessionOptions()
             opts.intra_op_num_threads = 2
             opts.inter_op_num_threads = 2
-            self.session = ort.InferenceSession(self.model_path, sess_options=opts, providers=["CPUExecutionProvider"])
+            try:
+                self.session = ort.InferenceSession(self.model_path, sess_options=opts, providers=["CPUExecutionProvider"])
+            except Exception as e:
+                print(f"\n[ONNX-Session-Error] LaMa model {self.model_path} failed to load: {e}. Re-downloading...")
+                import os
+                if os.path.exists(self.model_path):
+                    try:
+                        os.remove(self.model_path)
+                    except Exception:
+                        pass
+                from download_models import main as download_models_main
+                download_models_main()
+                self.session = ort.InferenceSession(self.model_path, sess_options=opts, providers=["CPUExecutionProvider"])
 
     def inpaint_solid(self, img, mask):
         # OpenCV Telea inpainting for solid backgrounds
@@ -108,8 +120,12 @@ class Inpainter:
                     break
 
         if has_complex:
-            # Use LaMa for the whole image (using global mask) to ensure seamless blending
-            inpainted_img = self.inpaint_lama(img, global_mask)
+            try:
+                # Use LaMa for the whole image (using global mask) to ensure seamless blending
+                inpainted_img = self.inpaint_lama(img, global_mask)
+            except Exception as e:
+                print(f"\n[inpaint-error] LaMa inpainting failed: {e}. Falling back to OpenCV Telea.")
+                inpainted_img = self.inpaint_solid(img, global_mask)
         else:
             # Use OpenCV Telea (solid background) for the whole image
             inpainted_img = self.inpaint_solid(img, global_mask)

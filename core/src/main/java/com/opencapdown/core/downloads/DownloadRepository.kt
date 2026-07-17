@@ -86,5 +86,11 @@ internal class DownloadRepository(
 
     suspend fun updateChapterStatus(chapterId: String, status: String) =
         chapterDao.updateStatus(chapterId, status)
+
+    suspend fun getJobsByChapter(chapterId: String): List<DownloadJobEntity> =
+        jobDao.getByChapterId(chapterId)
+
+    suspend fun resetDownloadingJobsToQueued() =
+        jobDao.resetDownloadingToQueued()
 }
 

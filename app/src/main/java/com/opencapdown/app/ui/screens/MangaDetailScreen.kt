@@ -49,6 +49,7 @@ fun MangaDetailScreen(
     var isFavorite by remember { mutableStateOf(false) }
     var library by remember { mutableStateOf<List<LibraryManga>>(emptyList()) }
     val isBackingUpMap = remember { mutableStateMapOf<String, Boolean>() }
+    val isTranslatingMap = remember { mutableStateMapOf<String, Boolean>() }
     var isDescriptionExpanded by remember { mutableStateOf(false) }
 
     val mangaId = mangaDetail?.let { "${it.sourceId}-${it.title.hashCode()}" } ?: ""
@@ -353,6 +354,7 @@ fun MangaDetailScreen(
                 } else {
                     itemsIndexed(detail.chapters) { _, chapter ->
                         val isBackingUp = isBackingUpMap[chapter.id] == true
+                        val isTranslating = isTranslatingMap[chapter.id] == true
 
                         Row(
                             modifier = Modifier
@@ -401,9 +403,7 @@ fun MangaDetailScreen(
                                         tint = MaterialTheme.colorScheme.secondary,
                                         modifier = Modifier.size(26.dp)
                                     )
-                                }
-
-                                // Botão Backup Telegram
+                                              // Botão Backup Telegram
                                 if (isBackingUp) {
                                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                                 } else {
@@ -425,6 +425,33 @@ fun MangaDetailScreen(
                                             imageVector = Icons.Default.Share,
                                             contentDescription = "Backup Telegram",
                                             tint = MaterialTheme.colorScheme.tertiary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+
+                                // Botão Traduzir
+                                if (isTranslating) {
+                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                } else {
+                                    IconButton(
+                                        onClick = {
+                                            scope.launch {
+                                                isTranslatingMap[chapter.id] = true
+                                                val result = core.translateChapter(chapter.id)
+                                                isTranslatingMap[chapter.id] = false
+                                                if (result.isSuccess) {
+                                                    Toast.makeText(context, "Tradução concluída com sucesso!", Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    Toast.makeText(context, "Falha ao traduzir: ${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                                }
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Translate,
+                                            contentDescription = "Traduzir",
+                                            tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }

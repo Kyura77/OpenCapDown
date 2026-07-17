@@ -8,7 +8,19 @@ class TextDetector:
         opts = ort.SessionOptions()
         opts.intra_op_num_threads = 2
         opts.inter_op_num_threads = 2
-        self.session = ort.InferenceSession(model_path, sess_options=opts, providers=["CPUExecutionProvider"])
+        try:
+            self.session = ort.InferenceSession(model_path, sess_options=opts, providers=["CPUExecutionProvider"])
+        except Exception as e:
+            print(f"\n[ONNX-Session-Error] YOLO model {model_path} failed to load: {e}. Re-downloading...")
+            import os
+            if os.path.exists(model_path):
+                try:
+                    os.remove(model_path)
+                except Exception:
+                    pass
+            from download_models import main as download_models_main
+            download_models_main()
+            self.session = ort.InferenceSession(model_path, sess_options=opts, providers=["CPUExecutionProvider"])
         self.input_name = self.session.get_inputs()[0].name
         self.input_shape = self.session.get_inputs()[0].shape # e.g. [1, 3, 640, 640]
         self.input_w = self.input_shape[3]

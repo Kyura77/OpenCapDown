@@ -28,6 +28,7 @@ fun SettingsScreen(
     var chatId by remember { mutableStateOf("") }
     var verdinhaToken by remember { mutableStateOf("") }
     var verdinhaMode by remember { mutableStateOf("cdn") }
+    var translationServerIp by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(true) }
     var botTokenVisible by remember { mutableStateOf(false) }
     var verdinhaSenhaVisible by remember { mutableStateOf(false) }
@@ -39,6 +40,7 @@ fun SettingsScreen(
         chatId = settings["telegram_chat_id"] ?: ""
         verdinhaToken = settings["verdinha_token"] ?: ""
         verdinhaMode = settings["verdinha_mode"] ?: "cdn"
+        translationServerIp = settings["translation_server_ip"] ?: ""
         isLoading = false
     }
 
@@ -198,12 +200,22 @@ fun SettingsScreen(
                     }
                 )
 
+                Text("Configuração de Tradução", fontSize = 18.sp, color = MaterialTheme.colorScheme.primary)
+
+                OutlinedTextField(
+                    value = translationServerIp,
+                    onValueChange = { translationServerIp = it },
+                    label = { Text("IP do Servidor de Tradução (PC)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 Button(
                     onClick = {
                         scope.launch {
                             core.updateTelegramConfig(botToken, chatId)
                             core.updateVerdinhaConfig(verdinhaToken)
                             core.updateVerdinhaMode(verdinhaMode)
+                            core.updateTranslationConfig(translationServerIp)
                         }
                     },
                     modifier = Modifier.fillMaxWidth()

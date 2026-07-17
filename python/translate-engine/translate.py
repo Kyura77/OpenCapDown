@@ -1,5 +1,6 @@
 import os
 import json
+import time
 from google import genai
 from google.genai import types
 from PIL import Image
@@ -34,20 +35,46 @@ For each bounding box:
 Make sure every box in the list has an entry. Return ONLY valid JSON matching the schema.
 """
 
-    # Call Gemini 2.5 Flash model
-    response = client.models.generate_content(
-        model='gemini-2.5-flash',
-        contents=[img, prompt],
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            temperature=0.2
-        )
-    )
+    models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash']
+    last_exception = None
 
-    try:
-        # Parse JSON output from the model
-        data = json.loads(response.text)
-        return data
-    except Exception as e:
-        print(f"Failed to parse JSON response:\n{response.text}")
-        raise e
+    for model_name in models_to_try:
+        for attempt in range(3):
+            try:
+                # Call Gemini
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=[img, prompt],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        temperature=0.2
+                    )
+                )
+
+                # Parse JSON output from the model
+                data = json.loads(response.text)
+
+                # Output validation: Verify if all input boxes are represented in the response
+                box_keys = {tuple(b) for b in boxes}
+                data_keys = set()
+                for item in data:
+                    b = item.get("box")
+                    if b and len(b) == 4:
+                        data_keys.add(tuple(b))
+
+                missing_boxes = box_keys - data_keys
+                if missing_boxes and attempt < 2:
+                    print(f"\n[gemini-validation] Model {model_name} response missed boxes: {missing_boxes}. Retrying page...")
+                    raise ValueError(f"Response missing boxes: {missing_boxes}")
+
+                return data
+            except Exception as e:
+                last_exception = e
+                delay_sec = 2.0 ** attempt
+                print(f"\n[gemini-error] Model {model_name} failed (attempt {attempt + 1}/3): {e}. Retrying in {delay_sec}s...")
+                time.sleep(delay_sec)
+        
+        print(f"\n[gemini-fallback] Model {model_name} failed all attempts. Trying next fallback...")
+
+    raise last_exception or ValueError("Failed to translate page after attempting all models.")
+

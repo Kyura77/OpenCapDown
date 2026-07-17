@@ -24,9 +24,19 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import android.content.Context
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 
 internal class OpenCapDownCoreImpl(
     override val version: String,
+    private val context: Context,
     private val sourceManager: SourceManager,
     private val downloadManager: DownloadManager,
     private val telegramSync: TelegramSync,
@@ -216,6 +226,7 @@ internal class OpenCapDownCoreImpl(
         val chatId = telegramConfigProvider.getChatId()?.toString() ?: ""
         val verdinhaToken = settingDao.get("verdinhaToken") ?: ""
         val verdinhaMode = settingDao.get("verdinhaMode") ?: "cdn"
+        val translationServerIp = settingDao.get("translationServerIp") ?: ""
         return mapOf(
             "version" to version,
             "botToken" to botToken,
@@ -223,7 +234,8 @@ internal class OpenCapDownCoreImpl(
             "telegram_bot_token" to botToken,
             "telegram_chat_id" to chatId,
             "verdinha_token" to verdinhaToken,
-            "verdinha_mode" to verdinhaMode
+            "verdinha_mode" to verdinhaMode,
+            "translation_server_ip" to translationServerIp
         )
     }
 
@@ -273,6 +285,100 @@ internal class OpenCapDownCoreImpl(
                 }
             }
         } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun updateTranslationConfig(serverIp: String) {
+        settingDao.set(SettingEntity("translationServerIp", serverIp))
+    }
+
+    override suspend fun translateChapter(chapterId: String): Result<Unit> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            val serverIp = settingDao.get("translationServerIp")
+            if (serverIp.isNullOrBlank()) {
+                return@withContext Result.failure(IllegalStateException("IP do servidor de tradução não configurado nos Ajustes."))
+            }
+
+            // Get local page entities
+            val pages = pageDao.getByChapter(chapterId)
+            if (pages.isEmpty()) {
+                return@withContext Result.failure(IllegalStateException("Baixe o capítulo primeiro para traduzir!"))
+            }
+
+            val localFiles = pages.map { File(it.localPath ?: "") }
+            if (localFiles.any { !it.exists() }) {
+                return@withContext Result.failure(IllegalStateException("Algumas páginas locais estão faltando. Baixe o capítulo novamente."))
+            }
+
+            // Create temp zip file of the pages
+            val tempZipFile = File(context.cacheDir, "temp_translate_$chapterId.zip")
+            if (tempZipFile.exists()) tempZipFile.delete()
+
+            // Zip the pages
+            ZipOutputStream(FileOutputStream(tempZipFile)).use { zos ->
+                localFiles.forEach { file ->
+                    val entry = ZipEntry(file.name)
+                    zos.putNextEntry(entry)
+                    FileInputStream(file).use { fis ->
+                        fis.copyTo(zos)
+                    }
+                    zos.closeEntry()
+                }
+            }
+
+            // Send post request to FastAPI
+            val mediaType = "application/zip".toMediaTypeOrNull()
+            val requestBody = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("file", tempZipFile.name, tempZipFile.asRequestBody(mediaType))
+                .build()
+
+            val request = Request.Builder()
+                .url("http://$serverIp:5050/translate")
+                .post(requestBody)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                tempZipFile.delete() // Clean up temp zip
+                if (!response.isSuccessful) {
+                    val errorMsg = response.body?.string() ?: "Erro no servidor"
+                    return@withContext Result.failure(Exception("Servidor de tradução retornou erro: $errorMsg"))
+                }
+
+                // Save returned zip/cbz
+                val responseBytes = response.body?.bytes() ?: return@withContext Result.failure(Exception("Resposta vazia do servidor"))
+                val tempCbzFile = File(context.cacheDir, "temp_translated_$chapterId.cbz")
+                tempCbzFile.writeBytes(responseBytes)
+
+                // Unzip to translated cache directory
+                val destDir = File(context.cacheDir, "translated/$chapterId")
+                destDir.deleteRecursively()
+                destDir.mkdirs()
+
+                ZipFile(tempCbzFile).use { zip ->
+                    val entries = zip.entries()
+                    while (entries.hasMoreElements()) {
+                        val entry = entries.nextElement()
+                        val entryFile = File(destDir, entry.name)
+                        if (entry.isDirectory) {
+                            entryFile.mkdirs()
+                        } else {
+                            entryFile.parentFile?.mkdirs()
+                            zip.getInputStream(entry).use { input ->
+                                FileOutputStream(entryFile).use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                tempCbzFile.delete() // Clean up temp cbz
+                Result.success(Unit)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
             Result.failure(e)
         }
     }

@@ -14,6 +14,12 @@ internal class PageResolver(
     private val cacheDir: File
 ) {
     suspend fun resolve(page: Page, sourceId: String, chapterUrl: String): Any {
+        val translatedDir = File(cacheDir.parentFile, "translated/${page.chapterId}")
+        val translatedJpg = File(translatedDir, "page_${page.index + 1}.jpg")
+        val translatedPng = File(translatedDir, "page_${page.index + 1}.png")
+        if (translatedJpg.exists()) return translatedJpg
+        if (translatedPng.exists()) return translatedPng
+
         page.localPath?.let { path ->
             val file = File(path)
             if (file.exists()) return file

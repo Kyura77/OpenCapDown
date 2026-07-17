@@ -72,6 +72,7 @@ internal class CoreModule(private val context: Context) {
 
         return OpenCapDownCoreImpl(
             version = version,
+            context = context,
             sourceManager = sourceManager,
             downloadManager = downloadManager,
             telegramSync = telegramSync,

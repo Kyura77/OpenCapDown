@@ -60,6 +60,9 @@ def main():
         input_path = os.path.join(args.input, filename)
         output_path = os.path.join(temp_output_dir, filename)
 
+        if os.path.exists(output_path):
+            continue
+
         try:
             # 1. Detect boxes
             boxes = detector.detect(input_path)
